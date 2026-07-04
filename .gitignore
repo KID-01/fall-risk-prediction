@@ -1,0 +1,64 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+*.egg
+
+# ── 虚拟环境 ──
+venv/
+.venv/
+env/
+.env
+
+# ── 模型权重 ──
+*.pt
+*.pth
+*.onnx
+*.bin
+checkpoints/
+models_export/
+
+# ── 数据 ──
+data/raw/
+data/processed/
+data/keypoints/
+data/labels/
+*.mp4
+*.avi
+*.mov
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── 环境变量 / 密钥 ──
+.env
+*.env.local
+configs/ezviz.yaml
+
+# ── Jupyter ──
+.ipynb_checkpoints/
+*.ipynb
+
+# ── 日志 ──
+logs/
+*.log
+
+# ── 系统文件 ──
+.DS_Store
+Thumbs.db
+
+# ── DVC ──
+.dvc/cache/
+.dvc/tmp/
+
+# ── Docker ──
+docker-compose.override.yml

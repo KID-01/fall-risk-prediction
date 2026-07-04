@@ -1,0 +1,79 @@
+# ============================================================
+# 基础配置文件 — 所有模块的默认参数
+# 具体模块的配置在 configs/models/ 下各自独立
+# ============================================================
+
+# ── 项目信息 ──
+project:
+  name: "fall-risk-prediction"
+  version: "0.1.0"
+
+# ── 路径配置 ──
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  data_keypoints: "data/keypoints"
+  data_labels: "data/labels"
+  checkpoints: "checkpoints"
+  models_export: "models_export"
+  reports: "reports"
+  logs: "logs"
+
+# ── 视频采集 ──
+video:
+  fps: 15
+  resolution: [1280, 720]
+  codec: "h264"
+
+# ── 姿态估计 ──
+pose_estimation:
+  model_type: "movenet_thunder"  # movenet_thunder | rtmpose
+  input_size: [192, 192]
+  confidence_threshold: 0.3
+  num_keypoints: 33
+
+# ── 步态特征 ──
+gait:
+  window_size: 90        # 时序窗口帧数 (90帧 @15fps = 6秒)
+  window_stride: 15      # 滑动步长
+
+# ── 风险预测模型 ──
+model:
+  d_model: 256
+  nhead: 8
+  num_layers: 4
+  dropout: 0.1
+
+# ── 训练参数 ──
+training:
+  batch_size: 32
+  epochs: 100
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  warmup_epochs: 5
+  patience: 10           # 早停耐心值
+  num_workers: 4
+  mixed_precision: true
+
+# ── 数据集划分 ──
+dataset:
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+# ── 预警规则 ──
+alert:
+  green_threshold: 30
+  yellow_threshold: 50
+  orange_threshold: 75
+  yellow_cooldown_minutes: 10
+  orange_cooldown_minutes: 5
+  yellow_escalation_minutes: 15
+  orange_escalation_minutes: 3
+  resolve_minutes: 5
+
+# ── 推理服务 ──
+inference:
+  device: "cuda"         # cuda | cpu
+  inference_interval_ms: 200   # 推理间隔(毫秒)
+  max_latency_ms: 3000         # 端到端最大延迟
