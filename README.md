@@ -26,6 +26,15 @@
 
 ## 快速开始
 
+```powershell
+# 若未安装 Scoop，先安装（在 PowerShell 中执行）
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+irm get.scoop.sh | iex
+
+# 安装 make
+scoop install make
+```
+
 ```bash
 # 1. 克隆仓库
 git clone <repo-url>
