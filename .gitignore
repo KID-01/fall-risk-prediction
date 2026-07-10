@@ -28,6 +28,8 @@ data/raw/
 data/processed/
 data/keypoints/
 data/labels/
+data/baseline.db
+data/video_clips/
 *.mp4
 *.avi
 *.mov

@@ -1,6 +1,7 @@
 # ============================================================
-# 基础配置文件 — 所有模块的默认参数
-# 具体模块的配置在 configs/models/ 下各自独立
+# 基础配置文件 — 跌倒风险预测系统
+# 技术路线: 视频帧 → YOLOv8n人体检测 → MediaPipe Pose关键点 →
+#           四大相对特征 → 个体化基线对比 → 双层偏离检测 → 分级预警
 # ============================================================
 
 # ── 项目信息 ──
@@ -18,62 +19,134 @@ paths:
   models_export: "models_export"
   reports: "reports"
   logs: "logs"
+  video_clips: "data/video_clips"       # 预警视频片段存储
+  baseline_db: "data/baseline.db"       # 个体化基线数据库
 
 # ── 视频采集 ──
 video:
-  fps: 15
+  source_fps: 15                         # 萤石摄像头原始帧率
+  sample_fps: 10                         # 实际采样帧率(从15fps取10fps)
   resolution: [1280, 720]
   codec: "h264"
+  buffer_size: 30                        # 帧缓冲区大小
 
-# ── 姿态估计 ──
+# ── 人体检测 (第一阶段触发器) ──
+human_detection:
+  model: "yolov8n"                       # 轻量级YOLOv8n
+  confidence_threshold: 0.5
+  person_class_id: 0                     # COCO类别中 person 的ID
+  device: "cpu"                          # cpu | cuda
+
+# ── 姿态估计 (第二阶段) ──
 pose_estimation:
-  model_type: "movenet_thunder"  # movenet_thunder | rtmpose
-  input_size: [192, 192]
-  confidence_threshold: 0.3
+  model_type: "mediapipe_pose_lite"      # MediaPipe Pose Lite
+  model_complexity: 0                    # 0=Lite, 1=Full, 2=Heavy
   num_keypoints: 33
+  confidence_threshold: 0.5              # visibility > 0.5 才保留
+  min_visible_lower_keypoints: 4         # 下肢6个关键点至少可见4个
+  smoothing: true                        # 关键点平滑
 
-# ── 步态特征 ──
-gait:
-  window_size: 90        # 时序窗口帧数 (90帧 @15fps = 6秒)
-  window_stride: 15      # 滑动步长
+# ── 关键点索引定义 (MediaPipe Pose 33点) ──
+keypoints:
+  nose: 0
+  left_shoulder: 11
+  right_shoulder: 12
+  left_hip: 23
+  right_hip: 24
+  left_knee: 25
+  right_knee: 26
+  left_ankle: 27
+  right_ankle: 28
+  # 下肢关键点(6个) — 用于帧质量判断
+  lower_body: [23, 24, 25, 26, 27, 28]
+  # 躯干关键点(4个) — 用于躯干稳定性
+  trunk: [11, 12, 23, 24]
 
-# ── 风险预测模型 ──
-model:
-  d_model: 256
-  nhead: 8
-  num_layers: 4
-  dropout: 0.1
+# ── 四大相对特征 ──
+features:
+  # 1. 行走节拍频率: 髋关节y坐标时序FFT主频
+  walking_rhythm:
+    enabled: true
+    source_keypoints: [23, 24]           # 左右髋
+    fft_min_freq: 0.5                    # Hz, 过滤直流和极低频
+    fft_max_freq: 5.0                    # Hz, 正常步频上限
+  # 2. 步幅相对幅度: 踝关节摆动幅度/躯干高度归一化
+  step_amplitude:
+    enabled: true
+    source_keypoints: [27, 28]           # 左右踝
+    normalization: "torso_height"        # 用躯干高度归一化
+  # 3. 躯干稳定指数: 肩髋连线与垂直方向夹角变化范围
+  trunk_stability:
+    enabled: true
+    source_keypoints: [11, 12, 23, 24]   # 左右肩+左右髋
+  # 4. 活动密度: 单位时间内站立/行走帧占比
+  activity_density:
+    enabled: true
+    window_seconds: 60                   # 统计窗口
+    motion_threshold: 0.01               # 像素位移阈值,判断是否在运动
 
-# ── 训练参数 ──
-training:
-  batch_size: 32
-  epochs: 100
-  learning_rate: 0.0001
-  weight_decay: 0.0001
-  warmup_epochs: 5
-  patience: 10           # 早停耐心值
-  num_workers: 4
-  mixed_precision: true
+# ── 个体化基线 ──
+baseline:
+  collection_days: 7                     # 基线采集期天数
+  min_samples: 100                       # 最少有效样本数
+  storage: "sqlite"                      # sqlite | json
+  features: ["walking_rhythm", "step_amplitude", "trunk_stability", "activity_density"]
 
-# ── 数据集划分 ──
-dataset:
-  train_ratio: 0.7
-  val_ratio: 0.15
-  test_ratio: 0.15
+# ── 双层偏离检测 ──
+deviation:
+  # 第一层: 短期异常检测 (分钟级)
+  short_term:
+    window_minutes: 5                    # 滑动窗口大小
+    stride_seconds: 30                   # 滑动步长
+    method: "mahalanobis"                # 马氏距离
+    threshold: 3.0                       # 马氏距离阈值 (卡方分布 p<0.01)
+    consecutive_windows: 3               # 连续超阈窗口数触发
+  # 第二层: 长期趋势分析 (天级)
+  long_term:
+    window_days: 14                      # 滑动窗口
+    method: "linear_regression"          # 线性回归斜率
+    min_negative_days: 7                 # 连续负向变化天数
+    slope_threshold: -0.05               # 斜率阈值(负值表示下降)
 
-# ── 预警规则 ──
+# ── 四级预警规则 ──
 alert:
-  green_threshold: 30
-  yellow_threshold: 50
-  orange_threshold: 75
-  yellow_cooldown_minutes: 10
-  orange_cooldown_minutes: 5
-  yellow_escalation_minutes: 15
-  orange_escalation_minutes: 3
-  resolve_minutes: 5
+  levels:
+    low:
+      name: "低风险"
+      condition: "所有特征在基线±1个标准差范围内"
+      action: "持续监测，不推送"
+    attention:
+      name: "关注级"
+      condition: "短期偏离频繁出现(>=3次/小时)"
+      action: "APP推送提醒，建议关注"
+    warning:
+      name: "预警级"
+      condition: "长期趋势连续7天负向变化超过阈值"
+      action: "短信通知家属，建议安排体检"
+    critical:
+      name: "高危级"
+      condition: "近似跌倒异常动作 或 超过4小时无明显活动"
+      action: "电话通知家属，建议立即确认"
+  # 短期偏离频率统计
+  short_term_freq_threshold: 3           # 每小时短期偏离次数阈值
+  # 无活动判定
+  inactivity_threshold_minutes: 240      # 4小时无活动触发高危
+  # 视频回溯
+  video_clip:
+    enabled: true
+    before_seconds: 15                   # 预警前保存15秒
+    after_seconds: 15                    # 预警后保存15秒
+    format: "mp4"
 
 # ── 推理服务 ──
 inference:
-  device: "cuda"         # cuda | cpu
-  inference_interval_ms: 200   # 推理间隔(毫秒)
-  max_latency_ms: 3000         # 端到端最大延迟
+  device: "cpu"                          # cpu | cuda (当前为CPU模式)
+  inference_interval_ms: 200             # 推理间隔(毫秒)
+  max_latency_ms: 3000                   # 端到端最大延迟
+
+# ── 萤石开放平台 ──
+ezviz:
+  # 实际密钥配置在 configs/ezviz.yaml (已gitignore)
+  app_key: ""
+  app_secret: ""
+  rtsp_template: "rtsp://{username}:{password}@{device_ip}:554/stream"
