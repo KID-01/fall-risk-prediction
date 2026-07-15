@@ -1,41 +1,64 @@
 """
 跌倒风险预测系统 — FastAPI 后端入口
-启动方式: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+启动: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 
-API 端点:
-  GET  /                    系统信息
-  GET  /health              健康检查
-  GET  /config              系统配置
-  GET  /alerts/levels       预警分级规则
-  POST /predict             单次预测(占位)
-  POST /monitor/start       启动实时监控
-  POST /monitor/stop        停止监控
-  GET  /monitor/status      监控状态
-  GET  /monitor/alerts      预警历史
-  POST /monitor/baseline/reset  重置基线
-  GET  /features/info       四大特征说明
+API 路由 (RESTful + WebSocket):
+  GET  /                              系统信息
+  GET  /health                        健康检查
+  GET  /config                        系统配置
+  GET  /features/info                 四大特征说明
+  GET  /alerts/levels                 预警分级规则
+
+  POST /api/v1/stream/start           启动视频流分析
+  POST /api/v1/stream/stop            停止视频流分析
+  GET  /api/v1/risk/current           当前风险状态
+  GET  /api/v1/risk/history           历史风险记录(分页)
+  POST /api/v1/baseline/reset         重置基线
+
+  GET  /api/v1/alerts                 告警历史(筛选+分页)
+  POST /api/v1/alerts/{id}/acknowledge 确认告警
+
+  GET  /api/v1/stats                  统计面板数据
+
+  WS   /ws/alerts                     WebSocket 实时告警推送
 """
+from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from omegaconf import OmegaConf
-from pydantic import BaseModel
+from pathlib import Path
 
-from src.inference.monitor import FallRiskMonitor
+from src.api.routes import alerts_router, monitor_router, stats_router
+from src.api.websocket import websocket_endpoint
 from src.utils.config import get_config
+from src.utils.logger import get_logger, setup_logging
 
-# ── 加载配置 ──
+# ── 初始化 ──
+setup_logging()
+log = get_logger(__name__)
 config: Any = get_config()
 
-# ── 创建 FastAPI 应用 ──
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期: 启动时初始化, 关闭时清理"""
+    log.info("FastAPI 服务启动")
+    yield
+    log.info("FastAPI 服务关闭")
+
+
+# ── 创建应用 ──
 app = FastAPI(
     title="跌倒风险预测系统",
     description="基于多模态AI监测的老年人跌倒风险前置防控 API",
     version=str(config.project.version),
+    lifespan=lifespan,
 )
 
-# ── CORS 中间件 ──
+# ── CORS ──
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -44,30 +67,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── 监控服务单例 ──
-monitor = FallRiskMonitor()
+# ── 注册路由 ──
+app.include_router(monitor_router)
+app.include_router(alerts_router)
+app.include_router(stats_router)
+
+# ── WebSocket ──
+app.websocket("/ws/alerts")(websocket_endpoint)
 
 
-# ============================================================
-# 请求/响应模型
-# ============================================================
-
-class MonitorStartRequest(BaseModel):
-    source: str = "0"               # 视频源(RTSP地址/文件/摄像头编号)
-    person_id: str = "default"      # 被监测人员ID
-
-
-class PredictRequest(BaseModel):
-    video_url: str | None = None
-
-
-# ============================================================
-# 基础端点
-# ============================================================
+# ── 基础端点 ──
 
 @app.get("/")
 async def root():
-    """系统信息"""
     return {
         "system": config.project.name,
         "version": config.project.version,
@@ -78,42 +90,13 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """健康检查"""
     return {"status": "healthy"}
 
 
 @app.get("/config")
 async def get_config_endpoint():
-    """获取系统配置"""
     return OmegaConf.to_container(config, resolve=True)
 
-
-# ============================================================
-# 预警相关
-# ============================================================
-
-@app.get("/alerts/levels")
-async def alert_levels():
-    """预警分级规则"""
-    return {
-        "green": {"threshold": config.alert.green_threshold, "desc": "低风险"},
-        "yellow": {
-            "threshold": config.alert.yellow_threshold,
-            "desc": "中风险",
-            "cooldown_minutes": config.alert.yellow_cooldown_minutes,
-        },
-        "orange": {
-            "threshold": config.alert.orange_threshold,
-            "desc": "高风险",
-            "cooldown_minutes": config.alert.orange_cooldown_minutes,
-        },
-        "red": {"threshold": 100, "desc": "已跌倒/紧急"},
-    }
-
-
-# ============================================================
-# 特征说明
-# ============================================================
 
 @app.get("/features/info")
 async def features_info():
@@ -142,71 +125,19 @@ async def features_info():
     }
 
 
-# ============================================================
-# 预测端点(占位)
-# ============================================================
-
-@app.post("/predict")
-async def predict(req: PredictRequest):
-    """跌倒风险预测(占位,实际推理需通过监控服务)"""
-    return {
-        "code": 200,
-        "message": "预测接口已就绪,实时推理请使用 /monitor/start",
-        "data": {
-            "risk_score": None,
-            "alert_level": "low",
-            "video_url": req.video_url,
-        },
-    }
+@app.get("/alerts/levels")
+async def alert_levels():
+    """预警分级规则"""
+    levels = config.alert.levels
+    return OmegaConf.to_container(levels, resolve=True)
 
 
-# ============================================================
-# 实时监控端点
-# ============================================================
-
-@app.post("/monitor/start")
-async def monitor_start(req: MonitorStartRequest):
-    """启动实时监控"""
-    if monitor.status.is_running:
-        raise HTTPException(status_code=409, detail="监控已在运行中,请先停止")
-    success = monitor.start(source=req.source, person_id=req.person_id)
-    if not success:
-        raise HTTPException(status_code=500, detail="启动失败")
-    return {"code": 200, "message": "监控已启动", "source": req.source, "person_id": req.person_id}
-
-
-@app.post("/monitor/stop")
-async def monitor_stop():
-    """停止监控"""
-    monitor.stop()
-    return {"code": 200, "message": "监控已停止"}
-
-
-@app.get("/monitor/status")
-async def monitor_status():
-    """获取监控状态"""
-    return monitor.get_status()
-
-
-@app.get("/monitor/alerts")
-async def monitor_alerts(level: str | None = None, limit: int = 100):
-    """获取预警历史"""
-    return monitor.get_alert_history(level=level, limit=limit)
-
-
-@app.post("/monitor/baseline/reset")
-async def monitor_baseline_reset():
-    """重置个体化基线"""
-    monitor.reset_baseline()
-    return {"code": 200, "message": "基线已重置"}
+# ── 静态文件服务(前端) ──
+frontend_dir = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if frontend_dir.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
 
 
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(
-        "src.api.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-    )
+    uvicorn.run("src.api.main:app", host="0.0.0.0", port=8000, reload=True)

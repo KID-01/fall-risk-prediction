@@ -64,3 +64,19 @@ Thumbs.db
 
 # ── Docker ──
 docker-compose.override.yml
+
+# ── 前端 ──
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# ── SQLite 数据库文件 ──
+*.db
+*.db-journal
+
+# ── 编译缓存 ──
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

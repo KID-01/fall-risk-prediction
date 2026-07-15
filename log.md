@@ -1,5 +1,176 @@
 # 更新日志
 
+## 2026-07-15 后端框架重构 + Docker部署 + 前端实时看板
+
+### 概述
+
+补全了之前缺失的非算法内容：FastAPI 后端框架从单文件 `main.py` 重构为分层架构（路由拆分 + 数据库层 + WebSocket），添加 Docker 容器化部署，实现 React + ECharts 前端家属端实时风险看板。
+
+新增 **13 个文件**（含 .py / .yml / .conf / .json / .jsx / .css / .html），覆盖 T7.3、T8.1-T8.3、T9.1、T11.4。
+
+---
+
+### 新增文件
+
+#### T8.1 FastAPI 路由拆分 — `src/api/routes.py` + `src/api/main.py`(重写)
+- `main.py` 重构：lifecycle 管理、CORS、路由注册、WebSocket 端点、静态文件服务
+- `routes.py`：按功能拆分 3 个 APIRouter
+  - `monitor_router` (/api/v1/stream/*, /api/v1/risk/*, /api/v1/baseline/*)
+  - `alerts_router` (/api/v1/alerts, /api/v1/alerts/{id}/acknowledge)
+  - `stats_router` (/api/v1/stats)
+
+#### T8.2 推理服务封装 — 已由 `src/inference/monitor.py` 完成（标记确认）
+
+#### T8.3 数据持久化 — `src/api/database.py`
+- `Database` 单例，SQLite 两张核心表：`risk_records` + `alert_events`
+- 支持时间范围筛选、分页查询、告警确认
+- `get_stats()` 统计面板数据（告警计数、平均风险评分）
+
+#### T7.3 WebSocket 推送 — `src/api/websocket.py`
+- `ConnectionManager` 连接管理器，支持广播和单发
+- `/ws/alerts` 端点，实时推送告警到前端
+- 心跳 ping/pong 机制
+
+#### T9.1 家属端实时看板 — `frontend/` 目录
+- `package.json` + `vite.config.js` + `index.html` — Vite + React 构建配置
+- `src/App.jsx` — 主组件：风险等级大卡片、ECharts 仪表盘、风险趋势折线图、告警列表
+- `src/index.css` — 适老化设计（大字体≥16px、高对比度、色彩分级绿/黄/橙/红）
+- WebSocket 实时连接，5秒定时刷新状态
+
+#### T11.4 Docker 容器化 — `docker/` 目录
+- `Dockerfile` — Python 3.12-slim 基础镜像，安装 OpenCV/MediaPipe 系统依赖
+- `docker-compose.yml` — 三服务编排：api + redis + nginx
+- `nginx.conf` — 反向代理配置（前端静态文件 + API 代理 + WebSocket 代理）
+
+#### 萤石配置模板 — `configs/ezviz.yaml`
+- appKey/appSecret/deviceSerial 占位（已 gitignore，待用户填入真实密钥）
+
+---
+
+### 任务清单状态更新
+
+| 任务 | 原状态 | 新状态 | 说明 |
+|------|--------|--------|------|
+| T7.3 预警推送服务 | ☐ 未开始 | ✅ 完成 | WebSocket 实时推送 |
+| T8.1 FastAPI骨架 | ◐ 部分 | ✅ 完成 | 路由拆分+RESTful+WebSocket |
+| T8.2 推理服务封装 | ◐ 部分 | ✅ 完成 | monitor.py 确认 |
+| T8.3 数据持久化 | ◐ 部分 | ✅ 完成 | SQLite risk_records+alert_events |
+| T9.1 家属端看板 | ☐ 未开始 | ✅ 完成 | React+ECharts 适老化 |
+| T11.4 Docker部署 | ☐ 未开始 | ✅ 完成 | Dockerfile+compose+nginx |
+
+### 总进度
+
+- ✅ 已完成：**18 / 40** (45%)
+- ◐ 部分完成：**6 / 40** (15%)
+- ☐ 未开始：**16 / 40** (40%)
+
+---
+
+## 2026-07-15 数据管线补全 + 核心预测模型 + 日志系统
+
+### 概述
+
+对照 `fall-risk-tech-tasks.html` 和 `挑战杯大纲0.1.md` 任务清单，补全了数据采集管线缺失模块，实现了核心预测模型（Transformer编码器+多模态融合+风险头），并添加了结构化日志系统。萤石SDK（T1.3）待用户提供密钥后接入。
+
+新增 **13 个文件**，覆盖 T1.5、T2.1、T2.2、T2.3、T2.5、T5.1-T5.5 共 9 个子任务。
+
+---
+
+### 新增文件
+
+#### T1.5 日志系统 — `src/utils/logger.py`
+- 基于 loguru，按天轮转，保留 30 天，自动压缩
+- 同时输出到控制台（彩色）+ 文件（结构化）+ 错误专属日志
+- `setup_logging()` 幂等初始化，`get_logger(name)` 获取带模块名的 logger
+
+#### T2.1 视频采集脚本 — `scripts/collect_video.py`
+- `collect_single()` 参数化采集单段视频，自动生成 `.json` 元数据
+- `collect_batch()` 读取 CSV 采集计划，批量循环执行
+- 支持 `--source`(RTSP/文件/摄像头) `--scene` `--duration` `--output` `--batch` 参数
+
+#### T2.2 数据预处理管线 — `src/data/preprocess.py`
+- `ROICropper` 人体检测框外扩 20%，resize 到 256×256，保持宽高比（padding 黑边）
+- `PreprocessPipeline` 整合人体检测 + ROI 裁剪
+- `scripts/preprocess_videos.py` 离线批处理脚本
+
+#### T2.3 关键点存储管线 — `src/data/keypoint_store.py` + `scripts/extract_keypoints.py`
+- `KeypointStore` 时序关键点保存为 `.npy`，shape=(T, 33, 4)，支持元数据 JSON
+- `scripts/extract_keypoints.py` 批量提取预处理帧目录中的关键点
+
+#### T2.5 PyTorch Dataset/DataLoader — `src/data/dataset.py`
+- `FallRiskDataset` 继承 `torch.utils.data.Dataset`，返回 `{keypoints, risk_score, risk_level}`
+- 时序采样：固定长度窗口（T=90 帧≈6 秒），不足循环 padding
+- 数据增强：①关键点抖动(高斯噪声) ②水平翻转(左右关节交换) ③时序裁剪 ④时间缩放
+- `create_dataloaders()` 按 7:1.5:1.5 划分训练/验证/测试集
+
+#### T5.1 时序特征编码器 — `src/models/temporal_encoder.py`
+- `TemporalEncoder`：Transformer Encoder，4 层，8 头，d_model=256
+- 输入 (B,T,33,3) → 展平 (B,T,99) → 线性投影 (B,T,256) → CLS token + 位置编码 → Transformer
+- 输出 (seq_features (B,T,256), global_feat (B,256))
+- 采用 Pre-LN + GELU 激活
+
+#### T5.2 多模态融合模块 — `src/models/multimodal_fusion.py`
+- `MultiModalFusion`：三路输入 Cross-Attention 融合
+- ① 时序全局特征 (B,256) → Query ② 步态手工特征 (B,4) → MLP→(B,128) ③ 环境风险 (B,5) → MLP→(B,64)
+- Key/Value = gait(128) + env(64) = 192 维，Cross-Attention 后残差+FFN+LayerNorm
+
+#### T5.3 风险评分回归头 + 分类头 — `src/models/risk_head.py`
+- `RiskPredictionHead`：回归头 MLP(256→128→64→1)+Sigmoid→[0,100]；分类头 MLP(256→128→4)
+- `OrdinalLoss`：序数损失，将 4 级转为 3 个二分类(>0,>1,>2)
+- `MultiTaskLoss`：α*MSE + β*CrossEntropy + γ*OrdinalLoss
+
+#### T5.4 完整模型组装 — `src/models/fall_risk_predictor.py`
+- `FallRiskPredictor`：TemporalEncoder + MultiModalFusion + RiskPredictionHead
+- `forward(keypoints, gait_feat, env_feat)` → `{risk_score, risk_probs, risk_logits}`
+- `compute_loss()` 计算多任务损失
+- `predict()` 推理模式便捷接口
+
+#### T5.5 训练管线 — `scripts/train.py`
+- AdamW 优化器 + CosineAnnealingWarmRestarts 调度
+- 混合精度训练（torch.cuda.amp）
+- 早停（patience=10）+ Checkpoint 保存（best.pt 含模型+优化器状态）
+- 训练/验证/测试完整循环
+
+---
+
+### 任务清单完成状态更新
+
+| 任务 | 原状态 | 新状态 | 说明 |
+|------|--------|--------|------|
+| T1.5 配置管理与日志系统 | ◐ 部分 | ✅ 完成 | loguru 日志系统补全 |
+| T2.1 视频采集脚本 | ☐ 未开始 | ✅ 完成 | collect_video.py + 批量采集 |
+| T2.2 数据预处理管线 | ◐ 部分 | ✅ 完成 | ROI裁剪+Pipeline+批处理脚本 |
+| T2.3 骨骼关键点提取管线 | ◐ 部分 | ✅ 完成 | keypoint_store + 批量提取脚本 |
+| T2.5 PyTorch Dataset | ☐ 未开始 | ✅ 完成 | FallRiskDataset + 数据增强 + DataLoader |
+| T5.1 时序特征编码器 | ☐ 未开始 | ✅ 完成 | Transformer Encoder |
+| T5.2 多模态融合 | ☐ 未开始 | ✅ 完成 | Cross-Attention 融合 |
+| T5.3 风险头 | ☐ 未开始 | ✅ 完成 | 回归+分类+序数损失 |
+| T5.4 完整模型组装 | ☐ 未开始 | ✅ 完成 | FallRiskPredictor 端到端 |
+| T5.5 训练管线 | ☐ 未开始 | ✅ 完成 | train.py 完整训练循环 |
+
+### 待完成
+
+| 任务 | 说明 |
+|------|------|
+| T1.3 萤石SDK | **等待用户提供 appKey/appSecret** |
+| T2.4 LabelStudio标注 | 待搭建 |
+| T2.6 DVC数据版本管理 | P2 低优先级 |
+| T3.1 ONNX推理类 | 当前用MediaPipe，待改为ONNX封装 |
+| T3.3 特征有效性验证 | t-SNE/SHAP/统计检验 |
+| T4.1-T4.3 环境风险感知 | 整模块待开发 |
+| T5.6 评估脚本 | 部分编写被中断，待补全 |
+| T5.7 ONNX导出+量化 | 待实现 |
+| T6.1 跌倒动作分类器 | P1 |
+| T7.2 告警去重状态机 | 待实现 |
+| T7.3 WebSocket推送 | 待实现 |
+| T8.3 Redis+完整SQLite | 待实现 |
+| T9.1-T9.2 前端 | 待开发 |
+| T10.1-T10.2 隐私边缘计算 | 待开发 |
+| T11.1-T11.4 测试与部署 | 待开发 |
+| T12.1-T12.4 文档与提交 | 部分 |
+
+---
+
 ## 2026-07-10 核心算法管线实现
 
 ### 概述
