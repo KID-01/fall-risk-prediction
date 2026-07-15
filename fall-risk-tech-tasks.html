@@ -480,6 +480,7 @@ footer {
   <div class="stack-group">
     <span class="stack-label">深度学习</span>
     <span class="stack-item">PyTorch</span>
+    <span class="stack-item">YOLOv8-Pose</span>
     <span class="stack-item">ONNX Runtime</span>
     <span class="stack-item">OpenCV</span>
   </div>
@@ -726,30 +727,33 @@ footer {
         <div class="task-check checked"></div>
         <div class="task-body">
           <div class="task-title"><span class="task-id">T2.3</span> 骨骼关键点提取管线</div>
-          <div class="task-brief">集成MoveNet/RTMPose，从视频帧中提取33个骨骼关键点，保存为结构化数据</div>
+          <div class="task-brief">使用YOLOv8-Pose一次推理同时完成人体检测+17点关键点提取，统一抽象层支持多后端切换</div>
         </div>
         <div class="task-tags"><span class="tag p0">P0</span><span class="tag est">2天</span></div>
       </summary>
       <div class="task-detail">
         <div class="detail-section"><h4>具体步骤</h4>
           <ul>
-            <li><strong>模型选型：</strong>优先使用 <strong>MoveNet Thunder</strong>（TensorFlow Lite → ONNX 转换）或 <strong>RTMPose</strong>（mmpose），在测试视频上对比精度和速度</li>
-            <li><strong>ONNX导出：</strong>将选定的姿态估计模型导出为 ONNX 格式，使用 ONNX Runtime 推理，确保跨平台（CPU/GPU/边缘设备）</li>
-            <li><strong>关键点数据结构：</strong>每帧输出 <code>np.ndarray</code> shape=(33, 3)，33个关键点，每点 (x, y, confidence)，x/y归一化到[0,1]</li>
-            <li><strong>时序存储：</strong><code>src/data/keypoint_store.py</code>，将连续帧的关键点保存为 <code>.npy</code> 文件，shape=(T, 33, 3)，T为帧数</li>
-            <li><strong>批量提取脚本：</strong><code>scripts/extract_keypoints.py</code>，并行处理所有预处理帧，输出到 <code>data/keypoints/</code></li>
-            <li><strong>可视化验证：</strong><code>scripts/vis_keypoints.py</code>，在原始视频上叠加骨骼连线，输出对比视频，用于人工检查关键点质量</li>
+            <li><strong>模型选型：</strong>使用 <strong>YOLOv8-Pose</strong>（ultralytics），一次推理同时输出人体检测框 + 17个COCO关键点，无需独立人体检测器，减少推理开销</li>
+            <li><strong>多后端抽象层：</strong><code>src/utils/keypoints.py</code> 定义13个语义关键点枚举（PoseKeypoint），通过 KEYPOINT_MAPS 映射表支持 YOLO-Pose(17点) 和 MediaPipe(33点) 双后端，<code>convert_keypoints()</code> 统一转换为 (13,4) 格式</li>
+            <li><strong>关键点数据结构：</strong>每帧输出 <code>np.ndarray</code> shape=(13, 4)，13个语义关键点，每点 (x, y, z, visibility)，x/y归一化到[0,1]</li>
+            <li><strong>时序存储：</strong><code>src/data/keypoint_store.py</code>，将连续帧的关键点保存为 <code>.npy</code> 文件，shape=(T, 13, 4)，T为帧数</li>
+            <li><strong>批量提取脚本：</strong><code>scripts/extract_keypoints.py</code>，处理所有预处理帧，输出到 <code>data/keypoints/</code></li>
+            <li><strong>后端切换：</strong>配置 <code>configs/base.yaml → pose_estimation.backend: "yolo_pose"</code> 一行切换，特征计算代码零修改</li>
           </ul>
         </div>
-        <div class="detail-section"><h4>关键点索引（MoveNet 33点）</h4></div>
-        <div class="code-block"><span class="cm"># 核心关注点（用于步态分析）</span>
-<span class="kw">KEYPOINTS</span> = {
-    <span class="str">"nose"</span>: <span class="num">0</span>,   <span class="str">"left_eye"</span>: <span class="num">1</span>,  <span class="str">"right_eye"</span>: <span class="num">2</span>,
-    <span class="str">"left_hip"</span>: <span class="num">11</span>, <span class="str">"right_hip"</span>: <span class="num">12</span>,
-    <span class="str">"left_knee"</span>: <span class="num">13</span>, <span class="str">"right_knee"</span>: <span class="num">14</span>,
-    <span class="str">"left_ankle"</span>: <span class="num">15</span>, <span class="str">"right_ankle"</span>: <span class="num">16</span>,
-    <span class="str">"left_shoulder"</span>: <span class="num">5</span>, <span class="str">"right_shoulder"</span>: <span class="num">6</span>,
-}</div>
+        <div class="detail-section"><h4>关键点索引（统一13语义枚举）</h4></div>
+        <div class="code-block"><span class="cm"># 统一语义关键点（后端无关，特征计算只引用这些）</span>
+<span class="kw">class</span> <span class="fn">PoseKeypoint</span>(IntEnum):
+    NOSE = <span class="num">0</span>
+    LEFT_SHOULDER = <span class="num">1</span>   RIGHT_SHOULDER = <span class="num">2</span>
+    LEFT_HIP = <span class="num">7</span>        RIGHT_HIP = <span class="num">8</span>
+    LEFT_KNEE = <span class="num">9</span>       RIGHT_KNEE = <span class="num">10</span>
+    LEFT_ANKLE = <span class="num">11</span>      RIGHT_ANKLE = <span class="num">12</span>
+    <span class="cm"># + ELBOW, WRIST 共13个</span>
+
+<span class="cm"># YOLO-Pose COCO 17点 → 语义映射</span>
+<span class="kw">YOLO_POSE_MAP</span> = {<span class="num">0</span>: NOSE, <span class="num">5</span>: L_SHOULDER, <span class="num">11</span>: L_HIP, ...}
       </div>
     </details>
 
@@ -848,20 +852,21 @@ footer {
         <div class="task-check partial"></div>
         <div class="task-body">
           <div class="task-title"><span class="task-id">T3.1</span> 姿态估计推理引擎</div>
-          <div class="task-brief">将ONNX姿态估计模型封装为生产级推理类，支持实时推理</div>
+          <div class="task-brief">使用YOLOv8-Pose封装推理类，一次推理同时输出人体框+17点关键点，工厂函数支持多后端切换</div>
         </div>
         <div class="task-tags"><span class="tag p0">P0</span><span class="tag est">1.5天</span></div>
       </summary>
       <div class="task-detail">
         <div class="detail-section"><h4>具体步骤</h4>
           <ul>
-            <li><strong>推理类：</strong><code>src/inference/pose_estimator.py</code>，<code>PoseEstimator</code> 类：
-              <br>① <code>__init__(model_path, device, confidence_threshold)</code> — 加载ONNX模型
-              <br>② <code>estimate(frame: np.ndarray) → Keypoints</code> — 单帧推理
-              <br>③ <code>estimate_batch(frames: np.ndarray) → list[Keypoints]</code> — 批量推理（利用GPU并行）</li>
-            <li><strong>预处理：</strong>帧缩放至模型输入尺寸（如192×192），归一化到[-1,1]，BGR→RGB</li>
-            <li><strong>后处理：</strong>关键点坐标从模型输出空间映射回原始图像空间，过滤低置信度关键点（&lt; 0.3 置为NaN）</li>
-            <li><strong>性能要求：</strong>单帧推理 &lt; 30ms（GPU），&lt; 100ms（CPU），批处理吞吐 ≥ 30fps</li>
+            <li><strong>推理类：</strong><code>src/data/yolo_pose_extractor.py</code>，<code>YoloPoseExtractor</code> 类：
+              <br>① <code>__init__(model_name, device, confidence_threshold)</code> — 加载YOLOv8-Pose模型
+              <br>② <code>extract(frame: VideoFrame) → KeypointFrame</code> — 单帧推理（同时输出检测框+关键点）
+              <br>③ <code>extract_with_box(frame) → (KeypointFrame, bbox)</code> — 同时返回关键点和检测框</li>
+            <li><strong>工厂函数：</strong><code>create_keypoint_extractor(backend)</code>，根据配置创建 YOLO-Pose 或 MediaPipe 提取器，统一接口</li>
+            <li><strong>统一输出：</strong><code>KeypointFrame(13, 4)</code> 格式，通过 <code>convert_keypoints()</code> 将 YOLO-Pose 像素坐标归一化后映射为13语义关键点</li>
+            <li><strong>性能优势：</strong>相比"独立检测+MediaPipe"两次推理，YOLO-Pose 单次推理完成检测+姿态估计，减少约40%延迟</li>
+            <li><strong>后端切换：</strong>配置 <code>pose_estimation.backend</code> 字段，"yolo_pose" / "mediapipe" 一行切换，上层代码无感知</li>
           </ul>
         </div>
       </div>

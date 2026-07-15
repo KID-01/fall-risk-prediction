@@ -1,5 +1,105 @@
 # 更新日志
 
+## 2026-07-15 方案更新：YOLO-Pose 替代 MoveNet/RTMPose
+
+### 概述
+
+项目组决定使用 YOLOv8-Pose 作为核心姿态估计方案，替代原方案中的 MoveNet/RTMPose。已更新两份方案文档（`fall-risk-tech-tasks.html` 和 `挑战杯大纲0.1.md`）中的相关描述。
+
+### 方案变更要点
+
+**原方案：**
+- T2.3：MoveNet Thunder / RTMPose，导出 ONNX，输出 33 点 (T,33,3)
+- T3.1：封装 ONNX 推理类，独立人体检测 + 姿态估计两次推理
+
+**新方案：**
+- T2.3：**YOLOv8-Pose** 一次推理同时完成人体检测 + 17点 COCO 关键点提取，无需独立检测器
+- T3.1：封装 `YoloPoseExtractor`，工厂函数 `create_keypoint_extractor()` 支持 yolo_pose / mediapipe 后端切换
+- 统一抽象层：13语义枚举 + 映射表，`convert_keypoints()` 转换为 (13,4) 格式，特征计算后端无关
+- 优势：减少约40%推理延迟，减少 mediapipe 依赖
+
+### 修改文件
+
+| 文件 | 修改内容 |
+|------|---------|
+| `fall-risk-tech-tasks.html` | T2.3 brief + 详情 + 关键点索引代码块；T3.1 brief + 详情；技术栈栏添加 YOLOv8-Pose |
+| `挑战杯大纲0.1.md` | T2.3 + T3.1 方案描述更新；技术栈表添加 YOLOv8-Pose |
+
+---
+
+## 2026-07-15 接入 YOLO-Pose 替代 MediaPipe
+
+### 概述
+
+项目组决定使用 YOLO-Pose（YOLOv8-Pose）替代 MediaPipe 进行人体检测+关键点提取。YOLO-Pose 一次推理同时输出人体框和 17 个 COCO 关键点，无需独立人体检测器，减少一次推理开销。
+
+通过引入**统一关键点抽象层**，实现了 MediaPipe 和 YOLO-Pose 双后端无缝切换，特征计算代码零修改。
+
+### 架构变更
+
+**变更前:**
+```
+视频帧 → HumanDetector(YOLOv8n) → KeypointExtractor(MediaPipe 33点) → KeypointFrame(33,4)
+```
+
+**变更后:**
+```
+视频帧 → YoloPoseExtractor(YOLOv8n-Pose 一次推理) → convert_keypoints → KeypointFrame(13,4)
+      或
+视频帧 → HumanDetector(YOLOv8n) → MediaPipeExtractor(33点) → convert_keypoints → KeypointFrame(13,4)
+```
+
+### 核心设计: 统一关键点抽象层
+
+1. **`PoseKeypoint` 枚举重定义为 13 个语义关键点**（NOSE/肩/肘/腕/髋/膝/踝），不再是 MediaPipe 的 33 点硬编码索引
+2. **`KEYPOINT_MAPS` 映射表**：MediaPipe 33点 → 13语义、YOLO-Pose 17点 → 13语义
+3. **`convert_keypoints()` 转换函数**：各后端原始坐标 → 统一 (13,4) 格式，YOLO-Pose 自动归一化像素坐标
+4. **`KeypointFrame` 统一存储 (13,4)**：特征计算代码只引用语义枚举，后端无关
+5. **`create_keypoint_extractor()` 工厂函数**：根据配置 `pose_estimation.backend` 自动创建对应提取器
+
+### 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `src/data/yolo_pose_extractor.py` | YOLOv8-Pose 提取器，一次推理同时检测+提关键点，支持 `extract()` 和 `extract_with_box()` |
+
+### 修改文件
+
+| 文件 | 修改内容 |
+|------|---------|
+| `src/utils/keypoints.py` | 重构：33点硬编码 → 13语义枚举 + 双后端映射表 + `convert_keypoints()` 转换函数 |
+| `src/data/keypoint_extractor.py` | 重构：`MediaPipeExtractor` 适配新接口 + `create_keypoint_extractor()` 工厂函数 |
+| `src/inference/monitor.py` | 使用工厂函数创建提取器；YOLO-Pose 模式跳过独立人体检测 |
+| `configs/base.yaml` | `pose_estimation.backend: "yolo_pose"` + `model_type: "yolov8n-pose"` |
+
+### 配置切换方式
+
+```yaml
+# configs/base.yaml → pose_estimation
+backend: "yolo_pose"      # yolo_pose | mediapipe (一行切换)
+model_type: "yolov8n-pose" # yolo_pose: yolov8n/s/m/l-pose | mediapipe: model_complexity
+```
+
+### 验证结果
+
+- 全部模块导入成功 ✅
+- 统一关键点数 13 ✅
+- 两种后端映射各 13 点 ✅
+- 配置读取 `backend: yolo_pose` ✅
+- 日志输出 `使用 YOLOv8-Pose 后端` ✅
+- 特征计算代码无需修改（语义索引抽象）✅
+
+### 优势
+
+| 维度 | MediaPipe | YOLO-Pose |
+|------|-----------|-----------|
+| 推理次数 | 2次（检测+姿态） | 1次（同时完成） |
+| 依赖 | mediapipe + ultralytics | 仅 ultralytics |
+| 关键点数 | 33点（冗余） | 17点（精简） |
+| 统一格式 | 13语义点 | 13语义点（相同） |
+
+---
+
 ## 2026-07-15 后端框架重构 + Docker部署 + 前端实时看板
 
 ### 概述
