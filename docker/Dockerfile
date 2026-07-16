@@ -20,7 +20,7 @@ WORKDIR /app
 
 # 先安装依赖 (利用 Docker 层缓存)
 COPY pyproject.toml Makefile ./
-RUN pip install --no-cache-dir -e ".[dev]"
+RUN pip install --no-cache-dir -e "."
 
 # 拷贝源码
 COPY src/ ./src/

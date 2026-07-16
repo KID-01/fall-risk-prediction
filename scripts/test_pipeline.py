@@ -103,7 +103,7 @@ def test_features():
     # 验证: 不稳定行走的躯干稳定指数应更大
     assert unstable_feat.trunk_stability > normal_feat.trunk_stability, \
         "不稳定行走的躯干稳定指数应大于正常行走"
-    print(f"\n  [✓] 断言通过: 不稳定行走躯干稳定指数({unstable_feat.trunk_stability:.2f}) > 正常({normal_feat.trunk_stability:.2f})")
+    print(f"\n  [OK] 断言通过: 不稳定行走躯干稳定指数({unstable_feat.trunk_stability:.2f}) > 正常({normal_feat.trunk_stability:.2f})")
 
     return normal_feat, unstable_feat
 
@@ -145,7 +145,7 @@ def test_baseline():
     print(f"  异常样本马氏距离: {dist_abnormal:.3f} (期望>正常)")
 
     assert dist_abnormal > dist_normal, "异常样本马氏距离应大于正常样本"
-    print(f"\n  [✓] 断言通过: 异常马氏距离({dist_abnormal:.3f}) > 正常({dist_normal:.3f})")
+    print(f"\n  [OK] 断言通过: 异常马氏距离({dist_abnormal:.3f}) > 正常({dist_normal:.3f})")
 
     # 清理 (Windows下SQLite文件可能延迟释放,忽略清理失败)
     import gc
@@ -193,9 +193,9 @@ def test_deviation_and_alerts(baseline):
     # 检查是否有非低风险事件
     non_low = [e for e in engine.get_events() if e.level != RiskLevel.LOW]
     if non_low:
-        print(f"  [✓] 成功触发预警: {len(non_low)} 个非低风险事件")
+        print(f"  [OK] 成功触发预警: {len(non_low)} 个非低风险事件")
     else:
-        print(f"  [⚠] 未触发预警(可能需要更多异常数据或调整阈值)")
+        print(f"  [!] 未触发预警(可能需要更多异常数据或调整阈值)")
 
     return engine
 
@@ -216,10 +216,10 @@ def main():
         test_deviation_and_alerts(baseline)
 
         print_header("测试总结")
-        print("  [✓] 四大特征计算 — 通过")
-        print("  [✓] 个体化基线建立 — 通过")
-        print("  [✓] 马氏距离偏离检测 — 通过")
-        print("  [✓] 四级预警引擎 — 通过")
+        print("  [OK] 四大特征计算 — 通过")
+        print("  [OK] 个体化基线建立 — 通过")
+        print("  [OK] 马氏距离偏离检测 — 通过")
+        print("  [OK] 四级预警引擎 — 通过")
         print("\n  全部核心算法测试完成!")
 
     except Exception as e:

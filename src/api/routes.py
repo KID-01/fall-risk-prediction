@@ -1,8 +1,8 @@
 """
-路由模块 — 按功能拆分 API 路由
-  routes_monitor.py  — 实时监控相关
-  routes_alerts.py   — 告警相关
-  routes_stats.py    — 统计面板
+路由模块 — 三个 APIRouter 均在此文件定义
+  monitor_router — 实时监控相关(启动/停止/风险/基线)
+  alerts_router  — 告警相关(查询/确认)
+  stats_router   — 统计面板
 """
 from __future__ import annotations
 

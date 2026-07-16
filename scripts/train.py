@@ -1,7 +1,7 @@
 """
 训练管线 — 完整训练循环、学习率调度、早停、模型保存
 用法: python scripts/train.py
-配置: configs/train.yaml (可选,默认使用base.yaml中的training配置)
+配置: configs/base.yaml 中的 model: 和 training: 节
 """
 from __future__ import annotations
 
