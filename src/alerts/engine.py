@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Callable
+from collections.abc import Callable
 
 from src.inference.deviation import DeviationLevel, DeviationResult
 from src.utils.config import get_config

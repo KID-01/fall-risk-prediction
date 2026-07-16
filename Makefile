@@ -6,7 +6,7 @@
 #       make serve     (启动API服务)
 # ============================================================
 
-.PHONY: help install install-dev setup check test lint format clean train evaluate serve docker-build docker-up docker-down
+.PHONY: help install install-dev setup check test lint format clean train serve docker-build docker-up docker-down
 
 # ── 默认目标：显示帮助 ──
 help:
@@ -25,13 +25,11 @@ help:
 	@echo "   make lint         代码检查 (ruff)"
 	@echo "   make format       自动格式化代码"
 	@echo ""
-	@echo " 训练与评估:"
+	@echo " 训练:"
 	@echo "   make train        训练模型"
-	@echo "   make evaluate     评估模型"
 	@echo ""
 	@echo " 运行:"
 	@echo "   make serve        启动后端API服务"
-	@echo "   make export-onnx  导出ONNX模型"
 	@echo ""
 	@echo " Docker:"
 	@echo "   make docker-build 构建Docker镜像"
@@ -75,17 +73,9 @@ test-cov:
 train:
 	python scripts/train.py
 
-# ── 评估模型 ──
-evaluate:
-	python scripts/evaluate.py
-
 # ── 启动API服务 ──
 serve:
 	uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
-
-# ── 导出ONNX模型 ──
-export-onnx:
-	python scripts/export_onnx.py
 
 # ── Docker ──
 docker-build:

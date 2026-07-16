@@ -138,6 +138,20 @@ alert:
     after_seconds: 15                    # 预警后保存15秒
     format: "mp4"
 
+# ── 模型参数 (FallRiskPredictor) ──
+model:
+  d_model: 256                      # 时序编码器/融合模块的隐藏维度
+  nhead: 8                          # Transformer注意力头数
+  num_layers: 4                     # Transformer编码器层数
+  dropout: 0.1                      # 编码器Dropout率
+
+# ── 训练参数 ──
+training:
+  weight_decay: 0.01                # AdamW权重衰减
+  warmup_epochs: 10                 # 预热epoch数(CosineAnnealingWarmRestarts T_0/2)
+  mixed_precision: false            # 是否启用混合精度训练(仅CUDA)
+  patience: 10                      # 早停耐心值
+
 # ── 推理服务 ──
 inference:
   device: "cpu"                          # cpu | cuda (当前为CPU模式)
