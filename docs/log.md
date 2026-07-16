@@ -374,6 +374,33 @@ model_type: "yolov8n-pose" # yolo_pose: yolov8n/s/m/l-pose | mediapipe: model_co
 
 ---
 
+## 2026-07-16~17 测试 + 迁移 + 项目清理
+
+全链路端到端验证通过（299 帧 640×360 视频，54.6s CPU，LOW 风险）。`make` 全部命令可用（除 `make check` GBK 崩溃待修）。
+
+### 测试
+
+- 新增 `tests/test_core.py` — 52 个单元测试，覆盖四大特征计算器、基线管理、双层偏离检测、四级预警引擎
+- 新增 `tests/test_integration_monitor.py` — 合成帧注入，验证特征→基线→偏离→预警整链路
+- 新增 `tests/test_smoke.py` — 5 个冒烟测试（配置/模型/API/推理模块）
+- 修复 `pyproject.toml` 中 pytest 配置，src-layout 导包正常工作
+
+### 迁移
+
+- `KeypointExtractor`: `mp.solutions.pose.Pose` → `mp.tasks.vision.PoseLandmarker`（MediaPipe 0.10.35 已移除旧 API）
+- `yolov8n.pt`、`pose_landmarker_lite.task` 从根目录移至 `checkpoints/`，代码路径同步更新
+
+### 配置修复
+
+- `configs/base.yaml` 补 `model:` 和 `training:` 配置段，`train.py` 不再崩溃
+- `Makefile` 移除 `evaluate` / `export-onnx` 两个已不存在的目标
+- `src/alerts/engine.py`: `typing.Callable` → `collections.abc.Callable`
+- `scripts/update_task_checklist.py`: T11.1 标记为 partial
+
+### 提交整理
+
+合从 6 个 squash 为 3 个原子提交，force push 到 `origin/master`。
+
 ## 待开发模块
 
 按项目方案研究进度，以下模块待后续实现：
