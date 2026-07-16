@@ -20,6 +20,7 @@ done = [
 ]
 partial = [
     "T1.2", "T3.1", "T3.2", "T3.3", "T7.1", "T12.1",
+    "T11.1",  # 有冒烟测试, 单元测试待补充
 ]
 
 old_check = '<div class="task-check"></div>'
