@@ -1,0 +1,20 @@
+{
+  "name": "fall-risk-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "跌倒风险预测系统 — 家属端实时风险看板",
+  "dependencies": {
+    "echarts": "^5.5.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  },
+  "devDependencies": {
+    "vite": "^5.3.0",
+    "@vitejs/plugin-react": "^4.3.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }
+}
