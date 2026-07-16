@@ -34,6 +34,10 @@ data/video_clips/
 *.avi
 *.mov
 
+# ── AI 辅助文件 ──
+AGENTS.md
+CLAUDE.md
+
 # ── IDE ──
 .vscode/
 .idea/
