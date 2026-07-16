@@ -1,8 +1,10 @@
 """
-关键点提取模块 — MediaPipe Pose 2D人体关键点
+关键点提取模块 — MediaPipe Pose 2D人体关键点 (Tasks API)
 输出33个关键点的2D坐标及可见度评分
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 import numpy as np
 
@@ -11,33 +13,47 @@ from src.utils.config import get_config
 from src.utils.keypoints import KeypointFrame
 
 
-class KeypointExtractor:
-    """MediaPipe Pose 关键点提取器"""
+# 默认模型路径(相对项目根目录)
+_DEFAULT_MODEL_PATH = str(Path(__file__).parents[2] / "pose_landmarker_lite.task")
 
-    def __init__(self, model_complexity: int | None = None):
+
+class KeypointExtractor:
+    """MediaPipe PoseLandmarker 关键点提取器 (Tasks API)"""
+
+    def __init__(self, model_path: str | None = None):
         config = get_config()
-        self.model_complexity = model_complexity if model_complexity is not None else config.pose_estimation.model_complexity
         self.confidence_threshold = config.pose_estimation.confidence_threshold
         self.min_visible_lower = config.pose_estimation.min_visible_lower_keypoints
-        self._pose = None
+        self._model_path = model_path or _DEFAULT_MODEL_PATH
+        self._landmarker = None
 
     def _ensure_model(self):
-        """延迟加载MediaPipe模型"""
-        if self._pose is None:
-            try:
-                import mediapipe as mp
-            except ImportError as e:
-                raise ImportError(
-                    "未安装 mediapipe,请运行: pip install mediapipe"
-                ) from e
-            self._mp_pose = mp.solutions.pose
-            self._pose = self._mp_pose.Pose(
-                static_image_mode=False,
-                model_complexity=self.model_complexity,
-                min_detection_confidence=self.confidence_threshold,
-                min_tracking_confidence=self.confidence_threshold,
-                smooth_landmarks=True,
-            )
+        """延迟加载MediaPipe PoseLandmarker"""
+        if self._landmarker is not None:
+            return
+        try:
+            from mediapipe.tasks import python
+            from mediapipe.tasks.python import vision
+        except ImportError as e:
+            raise ImportError(
+                "未安装 mediapipe (0.10+), 请运行: pip install mediapipe"
+            ) from e
+
+        model_path = self._model_path
+        if not Path(model_path).exists():
+            # 尝试从项目根目录相对路径加载
+            fallback = str(Path(__file__).parents[2] / "pose_landmarker_lite.task")
+            if Path(fallback).exists():
+                model_path = fallback
+
+        base_options = python.BaseOptions(model_asset_path=model_path)
+        options = vision.PoseLandmarkerOptions(
+            base_options=base_options,
+            running_mode=vision.RunningMode.IMAGE,
+            min_pose_detection_confidence=self.confidence_threshold,
+            min_tracking_confidence=self.confidence_threshold,
+        )
+        self._landmarker = vision.PoseLandmarker.create_from_options(options)
 
     def extract(self, video_frame: VideoFrame) -> KeypointFrame | None:
         """
@@ -46,17 +62,23 @@ class KeypointExtractor:
         """
         self._ensure_model()
         import cv2
+        import mediapipe as mp
 
         rgb = cv2.cvtColor(video_frame.frame, cv2.COLOR_BGR2RGB)
-        result = self._pose.process(rgb)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
-        if result.pose_landmarks is None:
+        result = self._landmarker.detect(mp_image)
+
+        if not result.pose_landmarks:
             return None
+
+        # 取第一个人体的关键点
+        landmarks = result.pose_landmarks[0]
 
         # 构建 (33, 4) 数组 [x, y, z, visibility]
         keypoints = np.zeros((33, 4), dtype=np.float32)
-        for i, lm in enumerate(result.pose_landmarks.landmark):
-            keypoints[i] = [lm.x, lm.y, lm.z, lm.visibility]
+        for i, lm in enumerate(landmarks):
+            keypoints[i] = [lm.x, lm.y, lm.z, lm.visibility if hasattr(lm, 'visibility') else 1.0]
 
         kp_frame = KeypointFrame(
             timestamp=video_frame.timestamp,
@@ -76,9 +98,9 @@ class KeypointExtractor:
         return kp_frame
 
     def close(self):
-        if self._pose is not None:
-            self._pose.close()
-            self._pose = None
+        if self._landmarker is not None:
+            self._landmarker.close()
+            self._landmarker = None
 
     def __del__(self):
         self.close()
