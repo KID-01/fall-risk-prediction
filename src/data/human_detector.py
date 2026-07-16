@@ -2,9 +2,11 @@
 人体检测模块 — YOLOv8n轻量级目标检测
 仅当检测到完整人体时才触发后续关键点提取,节省计算资源
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -52,10 +54,11 @@ class HumanDetector:
             try:
                 from ultralytics import YOLO
             except ImportError as e:
-                raise ImportError(
-                    "未安装 ultralytics,请运行: pip install ultralytics"
-                ) from e
-            self._model = YOLO(f"{self.model_name}.pt")
+                raise ImportError("未安装 ultralytics,请运行: pip install ultralytics") from e
+            config = get_config()
+            model_dir = Path(config.paths.checkpoints)
+            model_path = model_dir / f"{self.model_name}.pt"
+            self._model = YOLO(str(model_path))
 
     def detect(self, frame: np.ndarray) -> list[DetectionBox]:
         """
@@ -76,7 +79,10 @@ class HumanDetector:
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 boxes.append(
                     DetectionBox(
-                        x1=x1, y1=y1, x2=x2, y2=y2,
+                        x1=x1,
+                        y1=y1,
+                        x2=x2,
+                        y2=y2,
                         confidence=float(box.conf[0]),
                     )
                 )

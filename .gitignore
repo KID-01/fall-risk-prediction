@@ -20,6 +20,7 @@ env/
 *.pth
 *.onnx
 *.bin
+*.task
 checkpoints/
 models_export/
 
