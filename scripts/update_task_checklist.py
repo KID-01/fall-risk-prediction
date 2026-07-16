@@ -2,7 +2,7 @@
 from pathlib import Path
 import re
 
-html_path = Path(__file__).parent.parent / "fall-risk-tech-tasks.html"
+html_path = Path(__file__).parent.parent / "docs" / "fall-risk-tech-tasks.html"
 html = html_path.read_text(encoding="utf-8")
 
 # 重置
@@ -37,7 +37,7 @@ for tid in done + partial:
 html_path.write_text(html, encoding="utf-8")
 
 # ── 更新 Markdown 大纲 ──
-md_path = Path(__file__).parent.parent / "挑战杯大纲0.1.md"
+md_path = Path(__file__).parent.parent / "docs" / "挑战杯大纲0.1.md"
 content = md_path.read_text(encoding="utf-8")
 content = re.sub(r'\s*\[✅\]|\s*\[◐\]', '', content)
 

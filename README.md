@@ -18,8 +18,8 @@
 |------|------|
 | 语言 | Python 3.10+ |
 | 深度学习 | PyTorch, ONNX Runtime |
-| 姿态估计 | MoveNet / RTMPose |
-| 后端 | FastAPI + Redis + SQLite |
+| 姿态估计 | MediaPipe Pose / YOLOv8-Pose |
+| 后端 | FastAPI + SQLite |
 | 前端 | React + ECharts |
 | 部署 | Docker + Nginx |
 | 平台 | 萤石开放平台 |
@@ -69,12 +69,10 @@ fall-risk-prediction/
 │   └── utils/         # 通用工具函数
 ├── configs/           # YAML 配置文件
 ├── scripts/           # 采集、训练、部署脚本
-├── tests/             # 单元测试 & 集成测试
-├── notebooks/         # Jupyter 探索分析
+├── docs/              # 文档 (使用说明、开发日志、任务清单)
 ├── frontend/          # React 前端
 ├── docker/            # Dockerfile & compose
-├── checkpoints/       # 模型权重 (gitignore)
-├── data/              # 数据集 (gitignore)
+├── data/              # 数据集 & 基线数据库 (gitignore)
 ├── pyproject.toml     # 项目配置 & 依赖
 └── Makefile           # 常用命令
 ```
@@ -84,12 +82,9 @@ fall-risk-prediction/
 | 命令 | 说明 |
 |------|------|
 | `make check` | 检查开发环境 |
-| `make train` | 训练风险预测模型 |
-| `make evaluate` | 评估模型性能 |
 | `make serve` | 启动后端API服务 |
-| `make test` | 运行所有测试 |
-| `make lint` | 代码检查 |
-| `make format` | 自动格式化 |
+| `make lint` | 代码检查 (ruff) |
+| `make format` | 自动格式化 (ruff) |
 | `make docker-up` | 启动Docker服务 |
 
 ## 许可证
