@@ -1,81 +1,374 @@
-/* 全局样式 — 适老化设计: 大字体、高对比度 */
+/* ==========================================
+   跌倒风险预测系统 — 家属端实时看板
+   设计理念：适老化 · 高对比度 · 一眼判断
+   ========================================== */
 
+/* ── 设计变量（亮色模式） ── */
 :root {
-  --green: #52c41a;
-  --yellow: #faad14;
-  --orange: #fa8c16;
-  --red: #f5222d;
-  --bg: #f0f2f5;
-  --card-bg: #fff;
-  --text: #1a1e2b;
-  --muted: #8c8c8c;
-  --border: #e8e8e8;
+  --green: #22c55e;
+  --green-bg: #f0fdf4;
+  --yellow: #eab308;
+  --yellow-bg: #fefce8;
+  --orange: #f97316;
+  --orange-bg: #fff7ed;
+  --red: #ef4444;
+  --red-bg: #fef2f2;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --text: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --bg: #f1f5f9;
+  --card-bg: #ffffff;
+  --border: #e2e8f0;
+  --chart-bg: #ffffff;
+  --chart-text: #1e293b;
+  --chart-split: #f1f5f9;
+  --chart-axis: #e2e8f0;
+  --alert-item-bg: #f8fafc;
+  --alert-item-hover: #f1f5f9;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ── 暗色模式变量 ── */
+[data-theme="dark"] {
+  --green: #4ade80;
+  --green-bg: #052e16;
+  --yellow: #facc15;
+  --yellow-bg: #422006;
+  --orange: #fb923c;
+  --orange-bg: #431407;
+  --red: #f87171;
+  --red-bg: #450a0a;
+  --primary: #60a5fa;
+  --primary-hover: #3b82f6;
+  --text: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --bg: #0f172a;
+  --card-bg: #1e293b;
+  --border: #334155;
+  --chart-bg: #1e293b;
+  --chart-text: #e2e8f0;
+  --chart-split: #334155;
+  --chart-axis: #475569;
+  --alert-item-bg: #1e293b;
+  --alert-item-hover: #334155;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.5), 0 4px 10px rgba(0,0,0,0.3);
+}
+
+/* ── 全局重置 ── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── 页面容器 ── */
 .dashboard {
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 32px 24px 48px;
+  min-height: 100vh;
 }
 
+/* ── 顶部标题栏 ── */
 .dashboard-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
+  align-items: flex-start;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.dashboard-header h1 {
-  font-size: 24px;
+.header-left h1 {
+  font-size: 28px;
   font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.5px;
 }
 
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 8px;
+.header-left .subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-weight: 400;
 }
-.status-dot.online { background: var(--green); }
-.status-dot.offline { background: var(--muted); }
 
-/* 风险等级大卡片 */
-.risk-card {
+.connection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
   background: var(--card-bg);
-  border-radius: 12px;
-  padding: 32px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+
+.connection-badge .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.connection-badge.online .dot {
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+}
+
+.connection-badge.offline .dot {
+  background: var(--text-muted);
+}
+
+.connection-badge.online {
+  color: var(--green);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+/* ── 控制按钮栏 ── */
+.controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.btn:active { transform: scale(0.97); }
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+}
+
+.btn-danger {
+  background: var(--red);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+}
+
+.btn-secondary {
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--alert-item-bg);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+/* ── 主题切换按钮 ── */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  background: var(--alert-item-bg);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── 风险等级大卡片 ── */
+.risk-card {
+  position: relative;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 36px 40px;
   margin-bottom: 24px;
   text-align: center;
-  border: 3px solid var(--border);
-  transition: border-color 0.3s;
+  box-shadow: var(--shadow-lg);
+  border: 2px solid transparent;
+  transition: var(--transition);
+  overflow: hidden;
 }
-.risk-card.low { border-color: var(--green); }
-.risk-card.attention { border-color: var(--yellow); }
-.risk-card.warning { border-color: var(--orange); }
-.risk-card.critical { border-color: var(--red); }
+
+.risk-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 48px;
+  transition: var(--transition);
+  pointer-events: none;
+}
 
 .risk-card .level-label {
-  font-size: 36px;
-  font-weight: 700;
+  font-size: 42px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+  transition: var(--transition);
+}
+
+.risk-card .status-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.risk-card .risk-message {
+  font-size: 17px;
+  color: var(--text-secondary);
   margin-bottom: 8px;
 }
+
+.risk-card .meta-row {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.risk-card .meta-item {
+  text-align: center;
+}
+
+.risk-card .meta-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.risk-card .meta-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* 四级颜色 — 亮色模式 */
+.risk-card.low {
+  border-color: rgba(34, 197, 94, 0.2);
+  background: linear-gradient(180deg, #f0fdf4 0%, #fff 30%);
+}
+.risk-card.low::before { background: linear-gradient(180deg, rgba(34,197,94,0.28) 0%, rgba(34,197,94,0.10) 50%, transparent 100%); }
 .risk-card.low .level-label { color: var(--green); }
+.risk-card.low .meta-value { color: var(--green); }
+
+.risk-card.attention {
+  border-color: rgba(234, 179, 8, 0.3);
+  background: linear-gradient(180deg, #fefce8 0%, #fff 30%);
+}
+.risk-card.attention::before { background: linear-gradient(180deg, rgba(234,179,8,0.28) 0%, rgba(234,179,8,0.10) 50%, transparent 100%); }
 .risk-card.attention .level-label { color: var(--yellow); }
+.risk-card.attention .meta-value { color: var(--yellow); }
+
+.risk-card.warning {
+  border-color: rgba(249, 115, 22, 0.3);
+  background: linear-gradient(180deg, #fff7ed 0%, #fff 30%);
+}
+.risk-card.warning::before { background: linear-gradient(180deg, rgba(249,115,22,0.28) 0%, rgba(249,115,22,0.10) 50%, transparent 100%); }
 .risk-card.warning .level-label { color: var(--orange); }
+.risk-card.warning .meta-value { color: var(--orange); }
+
+.risk-card.critical {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: linear-gradient(180deg, #fef2f2 0%, #fff 30%);
+}
+.risk-card.critical::before { background: linear-gradient(180deg, rgba(239,68,68,0.28) 0%, rgba(239,68,68,0.10) 50%, transparent 100%); }
 .risk-card.critical .level-label { color: var(--red); }
+.risk-card.critical .meta-value { color: var(--red); }
 
-.risk-card .risk-score {
-  font-size: 64px;
-  font-weight: 800;
-  margin: 16px 0;
+/* 四级颜色 — 暗色模式 */
+[data-theme="dark"] .risk-card.low {
+  border-color: rgba(74, 222, 128, 0.15);
+  background: linear-gradient(180deg, #0a2e1a 0%, #1e293b 40%);
 }
-.risk-card .risk-message {
-  font-size: 18px;
-  color: var(--muted);
-}
+[data-theme="dark"] .risk-card.low::before { background: linear-gradient(180deg, rgba(74,222,128,0.10) 0%, rgba(74,222,128,0.03) 50%, transparent 100%); }
 
-/* 图表网格 */
+[data-theme="dark"] .risk-card.attention {
+  border-color: rgba(250, 204, 21, 0.15);
+  background: linear-gradient(180deg, #3d2206 0%, #1e293b 40%);
+}
+[data-theme="dark"] .risk-card.attention::before { background: linear-gradient(180deg, rgba(250,204,21,0.10) 0%, rgba(250,204,21,0.03) 50%, transparent 100%); }
+
+[data-theme="dark"] .risk-card.warning {
+  border-color: rgba(251, 146, 60, 0.15);
+  background: linear-gradient(180deg, #3d1a08 0%, #1e293b 40%);
+}
+[data-theme="dark"] .risk-card.warning::before { background: linear-gradient(180deg, rgba(251,146,60,0.10) 0%, rgba(251,146,60,0.03) 50%, transparent 100%); }
+
+[data-theme="dark"] .risk-card.critical {
+  border-color: rgba(248, 113, 113, 0.15);
+  background: linear-gradient(180deg, #3d0e0e 0%, #1e293b 40%);
+}
+[data-theme="dark"] .risk-card.critical::before { background: linear-gradient(180deg, rgba(248,113,113,0.10) 0%, rgba(248,113,113,0.03) 50%, transparent 100%); }
+
+/* ── 图表网格 ── */
 .chart-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -85,75 +378,195 @@
 
 .chart-card {
   background: var(--card-bg);
-  border-radius: 12px;
-  padding: 24px;
-}
-.chart-card h3 {
-  font-size: 18px;
-  margin-bottom: 16px;
-  font-weight: 600;
-}
-.chart-container {
-  width: 100%;
-  height: 300px;
+  border-radius: var(--radius);
+  padding: 28px;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
 }
 
-/* 告警列表 */
-.alert-list {
-  background: var(--card-bg);
-  border-radius: 12px;
-  padding: 24px;
+.chart-card:hover {
+  box-shadow: var(--shadow-lg);
 }
-.alert-list h3 {
-  font-size: 18px;
-  margin-bottom: 16px;
+
+.chart-card h3 {
+  font-size: 17px;
   font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+
+.chart-card h3::before {
+  content: '';
+  width: 4px;
+  height: 18px;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+.chart-container {
+  width: 100%;
+  height: 320px;
+}
+
+.chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 320px;
+  color: var(--text-muted);
+  font-size: 15px;
+  gap: 12px;
+}
+
+.chart-empty .empty-icon {
+  font-size: 40px;
+  opacity: 0.5;
+  margin-bottom: 4px;
+}
+
+/* ── 告警列表 ── */
+.alert-section {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 28px;
+  box-shadow: var(--shadow);
+}
+
+.alert-section h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-section h3::before {
+  content: '';
+  width: 4px;
+  height: 18px;
+  background: var(--red);
+  border-radius: 2px;
+}
+
 .alert-item {
   display: flex;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 16px;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--alert-item-bg);
+  transition: var(--transition);
+  font-size: 15px;
 }
-.alert-item:last-child { border-bottom: none; }
+
+.alert-item:hover {
+  background: var(--alert-item-hover);
+}
+
+.alert-item:last-child { margin-bottom: 0; }
+
 .alert-badge {
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 600;
-  margin-right: 16px;
-  min-width: 70px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+.alert-badge.low       { background: var(--green-bg); color: var(--green); }
+.alert-badge.attention { background: var(--yellow-bg); color: #b8860b; }
+.alert-badge.warning   { background: var(--orange-bg); color: var(--orange); }
+.alert-badge.critical  { background: var(--red-bg); color: var(--red); }
+
+.alert-message { flex: 1; color: var(--text); }
+
+.alert-time {
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.alert-empty {
   text-align: center;
+  padding: 40px 0;
+  color: var(--text-muted);
+  font-size: 15px;
 }
-.alert-badge.low { background: #f6ffed; color: var(--green); }
-.alert-badge.attention { background: #fffbe6; color: var(--yellow); }
-.alert-badge.warning { background: #fff7e6; color: var(--orange); }
-.alert-badge.critical { background: #fff1f0; color: var(--red); }
 
-/* 控制按钮 */
-.controls {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
+.alert-empty .empty-icon {
+  font-size: 36px;
+  opacity: 0.4;
+  margin-bottom: 8px;
+  display: block;
 }
-.btn {
-  padding: 10px 24px;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: opacity 0.2s;
-}
-.btn:hover { opacity: 0.85; }
-.btn-primary { background: #1890ff; color: #fff; }
-.btn-danger { background: var(--red); color: #fff; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* 响应式 */
+/* ── 响应式 ── */
 @media (max-width: 768px) {
-  .chart-grid { grid-template-columns: 1fr; }
-  .risk-card .risk-score { font-size: 48px; }
-  .risk-card .level-label { font-size: 28px; }
+  .dashboard {
+    padding: 20px 16px 32px;
+  }
+
+  .header-left h1 { font-size: 22px; }
+
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-container {
+    height: 260px;
+  }
+
+  .risk-card {
+    padding: 24px 20px;
+  }
+
+  .risk-card .level-label {
+    font-size: 32px;
+  }
+
+  .risk-card .meta-row {
+    gap: 20px;
+  }
+
+  .btn {
+    padding: 10px 18px;
+    font-size: 14px;
+  }
+}
+
+/* ── 动画 ── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.risk-card, .chart-card, .alert-section {
+  animation: fadeInUp 0.5s ease both;
+}
+
+.chart-card:nth-child(2) { animation-delay: 0.1s; }
+.alert-section { animation-delay: 0.2s; }
+
+/* ── 脉冲动画（高危时） ── */
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(239, 68, 68, 0.3); }
+  50% { border-color: rgba(239, 68, 68, 0.7); }
+}
+
+.risk-card.critical {
+  animation: fadeInUp 0.5s ease both, pulse-border 2s infinite;
 }

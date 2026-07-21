@@ -3,7 +3,8 @@ import * as echarts from 'echarts'
 
 const API_BASE = '/api/v1'
 const LEVEL_LABELS = { low: '低风险', attention: '关注级', warning: '预警级', critical: '高危级' }
-const LEVEL_COLORS = { low: '#52c41a', attention: '#faad14', warning: '#fa8c16', critical: '#f5222d' }
+const LEVEL_COLORS = { low: '#22c55e', attention: '#eab308', warning: '#f97316', critical: '#ef4444' }
+const LEVEL_ICONS = { low: '✓', attention: '◉', warning: '⚠', critical: '✕' }
 
 export default function App() {
   const [status, setStatus] = useState({
@@ -14,15 +15,28 @@ export default function App() {
     baseline_samples: 0,
     last_feature: null,
     last_alert: null,
+    frames_processed: 0,
+    frames_valid: 0,
   })
   const [alerts, setAlerts] = useState([])
   const [riskHistory, setRiskHistory] = useState([])
   const [stats, setStats] = useState({})
   const [connected, setConnected] = useState(false)
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('theme')
+    return saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  })
   const wsRef = useRef(null)
   const gaugeRef = useRef(null)
   const trendRef = useRef(null)
-  const radarRef = useRef(null)
+
+  // ── 主题切换 ──
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light')
 
   // ── 获取数据 ──
   const fetchStatus = useCallback(async () => {
@@ -30,7 +44,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/risk/current`)
       const data = await res.json()
       setStatus(data)
-    } catch (e) { console.error('状态获取失败:', e) }
+    } catch (e) { /* 后端未启动时静默 */ }
   }, [])
 
   const fetchAlerts = useCallback(async () => {
@@ -38,7 +52,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/alerts?limit=10`)
       const data = await res.json()
       setAlerts(data.alerts || [])
-    } catch (e) { console.error('告警获取失败:', e) }
+    } catch (e) { /* 静默 */ }
   }, [])
 
   const fetchRiskHistory = useCallback(async () => {
@@ -46,7 +60,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/risk/history?hours=24&limit=100`)
       const data = await res.json()
       setRiskHistory(data.records || [])
-    } catch (e) { console.error('历史获取失败:', e) }
+    } catch (e) { /* 静默 */ }
   }, [])
 
   const fetchStats = useCallback(async () => {
@@ -54,25 +68,21 @@ export default function App() {
       const res = await fetch(`${API_BASE}/stats?hours=24`)
       const data = await res.json()
       setStats(data)
-    } catch (e) { console.error('统计获取失败:', e) }
+    } catch (e) { /* 静默 */ }
   }, [])
 
-  // ── WebSocket 实时推送 ──
+  // ── WebSocket ──
   useEffect(() => {
     const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/alerts`
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
-    ws.onopen = () => { setConnected(true); console.log('WebSocket已连接') }
-    ws.onclose = () => { setConnected(false); console.log('WebSocket已断开') }
+    ws.onopen = () => setConnected(true)
+    ws.onclose = () => setConnected(false)
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data)
-      if (msg.type === 'alert') {
-        fetchAlerts()
-        fetchStatus()
-      }
+      if (msg.type === 'alert') { fetchAlerts(); fetchStatus() }
     }
-    ws.onerror = (e) => console.error('WebSocket错误:', e)
 
     return () => ws.close()
   }, [])
@@ -86,51 +96,110 @@ export default function App() {
     return () => clearInterval(interval)
   }, [])
 
-  // ── 风险评分仪表盘 ──
+  // ── 仪表盘 ──
   useEffect(() => {
     if (!gaugeRef.current) return
     const chart = echarts.init(gaugeRef.current)
+    const isDark = theme === 'dark'
+    const textColor = isDark ? '#e2e8f0' : '#1e293b'
+    const labelColor = isDark ? '#cbd5e1' : '#64748b'
+    const tickColor = isDark ? '#94a3b8' : '#94a3b8'
     const score = status.last_feature ? 50 : 0
-    const level = status.current_risk_level || 'low'
     chart.setOption({
       series: [{
         type: 'gauge',
+        radius: '85%',
         min: 0, max: 100,
-        axisLine: { lineStyle: { width: 20, color: [
-          [0.3, '#52c41a'], [0.5, '#faad14'], [0.75, '#fa8c16'], [1, '#f5222d']
-        ]}},
-        pointer: { width: 5 },
-        detail: { formatter: '{value}', fontSize: 32 },
-        data: [{ value: score, name: '风险评分' }]
-      }]
+        startAngle: 210, endAngle: -30,
+        axisLine: {
+          lineStyle: {
+            width: 18,
+            color: [
+              [0.3, '#22c55e'],
+              [0.5, '#eab308'],
+              [0.75, '#f97316'],
+              [1, '#ef4444'],
+            ],
+          },
+        },
+        pointer: { width: 5, itemStyle: { color: '#3b82f6' } },
+        axisTick: { distance: -18, length: 6, lineStyle: { width: 1, color: tickColor } },
+        splitLine: { distance: -22, length: 14, lineStyle: { width: 2, color: tickColor } },
+        axisLabel: { distance: 36, fontSize: 13, fontWeight: 600, color: labelColor },
+        anchor: { show: true, size: 14, itemStyle: { color: '#3b82f6' } },
+        title: { offsetCenter: [0, '78%'], fontSize: 14, color: labelColor },
+        detail: {
+          valueAnimation: true,
+          formatter: '{value}',
+          fontSize: 36,
+          fontWeight: 700,
+          color: textColor,
+          offsetCenter: [0, '55%'],
+        },
+        data: [{ value: score, name: '风险评分' }],
+      }],
     })
     return () => chart.dispose()
-  }, [status])
+  }, [status, theme])
 
-  // ── 风险趋势折线图 ──
+  // ── 趋势图 ──
   useEffect(() => {
-    if (!trendRef.current || riskHistory.length === 0) return
+    if (!trendRef.current) return
     const chart = echarts.init(trendRef.current)
-    const times = riskHistory.map(r => new Date(r.timestamp * 1000).toLocaleTimeString()).reverse()
+    if (riskHistory.length === 0) {
+      chart.setOption({})
+      return
+    }
+    const isDark = theme === 'dark'
+    const textColor = isDark ? '#e2e8f0' : '#1e293b'
+    const mutedColor = isDark ? '#64748b' : '#94a3b8'
+    const axisColor = isDark ? '#475569' : '#e2e8f0'
+    const splitColor = isDark ? '#334155' : '#f1f5f9'
+    const tooltipBg = isDark ? '#1e293b' : '#ffffff'
+    const tooltipBorder = isDark ? '#475569' : '#e2e8f0'
+    const times = riskHistory.map(r => new Date(r.timestamp * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })).reverse()
     const scores = riskHistory.map(r => r.risk_score || 0).reverse()
     chart.setOption({
-      tooltip: { trigger: 'axis' },
-      xAxis: { type: 'category', data: times, axisLabel: { fontSize: 12 } },
-      yAxis: { type: 'value', min: 0, max: 100 },
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: tooltipBg,
+        borderColor: tooltipBorder,
+        textStyle: { color: textColor, fontSize: 13 },
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+      },
+      grid: { left: 8, right: 16, top: 8, bottom: 8 },
+      xAxis: {
+        type: 'category', data: times,
+        axisLine: { lineStyle: { color: axisColor } },
+        axisLabel: { fontSize: 11, color: mutedColor },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: 'value', min: 0, max: 100,
+        splitLine: { lineStyle: { color: splitColor } },
+        axisLabel: { fontSize: 11, color: mutedColor },
+      },
       series: [{
         type: 'line', data: scores, smooth: true,
-        lineStyle: { width: 3, color: '#1890ff' },
-        areaStyle: { color: 'rgba(24,144,255,0.1)' },
-      }]
+        symbol: 'circle', symbolSize: 4,
+        lineStyle: { width: 3, color: '#3b82f6' },
+        itemStyle: { color: '#3b82f6' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(59,130,246,0.15)' },
+            { offset: 1, color: 'rgba(59,130,246,0.01)' },
+          ]),
+        },
+      }],
     })
     return () => chart.dispose()
-  }, [riskHistory])
+  }, [riskHistory, theme])
 
   // ── 控制操作 ──
   const startMonitor = async () => {
     await fetch(`${API_BASE}/stream/start`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: '0', person_id: 'default' })
+      body: JSON.stringify({ source: '0', person_id: 'default' }),
     })
     fetchStatus()
   }
@@ -146,45 +215,63 @@ export default function App() {
   const level = status.current_risk_level || 'low'
   const levelLabel = LEVEL_LABELS[level] || '低风险'
   const levelColor = LEVEL_COLORS[level] || LEVEL_COLORS.low
+  const levelIcon = LEVEL_ICONS[level] || '✓'
 
   return (
     <div className="dashboard">
-      {/* 头部 */}
+      {/* ── 顶部标题栏 ── */}
       <div className="dashboard-header">
-        <h1>跌倒风险预测系统</h1>
-        <div>
-          <span className={`status-dot ${connected ? 'online' : 'offline'}`} />
-          {connected ? '实时连接' : '未连接'}
+        <div className="header-left">
+          <h1>跌倒风险预测系统</h1>
+          <div className="subtitle">基于多模态 AI 监测 · 家属端实时看板</div>
+        </div>
+        <div className="header-right">
+          <button className="theme-toggle" onClick={toggleTheme} title={theme === 'light' ? '切换暗色模式' : '切换亮色模式'}>
+            {theme === 'light' ? '🌙' : '☀️'}
+          </button>
+          <span className={`connection-badge ${connected ? 'online' : 'offline'}`}>
+            <span className="dot" />
+            {connected ? '实时连接' : '未连接'}
+          </span>
         </div>
       </div>
 
-      {/* 控制按钮 */}
+      {/* ── 控制按钮 ── */}
       <div className="controls">
         <button className="btn btn-primary" onClick={startMonitor} disabled={status.is_running}>
-          启动监控
+          ▶ 启动监控
         </button>
         <button className="btn btn-danger" onClick={stopMonitor} disabled={!status.is_running}>
-          停止监控
+          ■ 停止监控
         </button>
-        <button className="btn" onClick={resetBaseline} style={{ background: '#d9d9d9' }}>
-          重置基线
+        <button className="btn btn-secondary" onClick={resetBaseline}>
+          ↻ 重置基线
         </button>
       </div>
 
-      {/* 风险等级大卡片 */}
+      {/* ── 风险等级大卡片 ── */}
       <div className={`risk-card ${level}`}>
         <div className="level-label" style={{ color: levelColor }}>{levelLabel}</div>
         <div className="risk-message">
           {status.last_alert ? status.last_alert.message : '系统运行正常，持续监测中'}
         </div>
-        <div style={{ marginTop: 16, color: 'var(--muted)' }}>
-          基线状态: {status.baseline_ready ? `已就绪 (${status.baseline_samples}样本)` : `采集中 (${status.baseline_samples}/100)`}
-          {' | '}处理帧数: {status.frames_processed || 0}
-          {' | '}有效帧: {status.frames_valid || 0}
+        <div className="meta-row">
+          <div className="meta-item">
+            <div className="meta-value">{status.baseline_ready ? '✓' : `${status.baseline_samples || 0}/100`}</div>
+            <div className="meta-label">基线采集</div>
+          </div>
+          <div className="meta-item">
+            <div className="meta-value">{status.frames_processed || 0}</div>
+            <div className="meta-label">处理帧数</div>
+          </div>
+          <div className="meta-item">
+            <div className="meta-value">{status.frames_valid || 0}</div>
+            <div className="meta-label">有效帧数</div>
+          </div>
         </div>
       </div>
 
-      {/* 图表网格 */}
+      {/* ── 图表网格 ── */}
       <div className="chart-grid">
         <div className="chart-card">
           <h3>当前风险评分</h3>
@@ -192,24 +279,35 @@ export default function App() {
         </div>
         <div className="chart-card">
           <h3>近24小时风险趋势</h3>
-          <div ref={trendRef} className="chart-container" />
+          {riskHistory.length === 0 ? (
+            <div className="chart-empty">
+              <span className="empty-icon">📊</span>
+              <span>暂无历史数据</span>
+              <span style={{ fontSize: 13 }}>启动监控后数据将在此展示</span>
+            </div>
+          ) : (
+            <div ref={trendRef} className="chart-container" />
+          )}
         </div>
       </div>
 
-      {/* 告警列表 */}
-      <div className="alert-list">
+      {/* ── 告警列表 ── */}
+      <div className="alert-section">
         <h3>最新告警</h3>
         {alerts.length === 0 ? (
-          <div style={{ color: 'var(--muted)', padding: '20px 0' }}>暂无告警记录</div>
+          <div className="alert-empty">
+            <span className="empty-icon">🔔</span>
+            <span>暂无告警记录</span>
+          </div>
         ) : (
           alerts.map((alert, i) => (
             <div key={i} className="alert-item">
               <span className={`alert-badge ${alert.alert_level}`}>
                 {LEVEL_LABELS[alert.alert_level] || alert.alert_level}
               </span>
-              <span style={{ flex: 1 }}>{alert.message}</span>
-              <span style={{ color: 'var(--muted)', fontSize: 14 }}>
-                {new Date(alert.timestamp * 1000).toLocaleString()}
+              <span className="alert-message">{alert.message}</span>
+              <span className="alert-time">
+                {new Date(alert.timestamp * 1000).toLocaleString('zh-CN')}
               </span>
             </div>
           ))
