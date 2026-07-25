@@ -159,8 +159,7 @@ inference:
   max_latency_ms: 3000                   # 端到端最大延迟
 
 # ── 萤石开放平台 ──
+# 密钥配置在 configs/ezviz.yaml（已 gitignore，不会提交到 Git）
+# 加载方式: from src.utils.config import get_ezviz_config
 ezviz:
-  # 实际密钥配置在 configs/ezviz.yaml (已gitignore)
-  app_key: ""
-  app_secret: ""
   rtsp_template: "rtsp://{username}:{password}@{device_ip}:554/stream"
