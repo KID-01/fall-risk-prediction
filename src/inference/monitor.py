@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass, field
 
 from src.alerts.engine import AlertEngine, AlertEvent, RiskLevel
+from src.api.database import Database
 from src.data.frame_filter import FrameFilter
 from src.data.human_detector import HumanDetector
 from src.data.keypoint_extractor import KeypointExtractor
@@ -160,6 +161,27 @@ class FallRiskMonitor:
                         )
                         self.status.last_alert = alert
                         self.status.current_risk_level = alert.level
+
+                        # 阶段8: 持久化
+                        db = Database()
+                        db.insert_risk_record(
+                            risk_score=deviation.mahalanobis_distance,
+                            risk_level=alert.level.value,
+                            person_id=self.person_id,
+                            gait_features={
+                                "walking_rhythm": feature.walking_rhythm,
+                                "step_amplitude": feature.step_amplitude,
+                                "trunk_stability": feature.trunk_stability,
+                                "activity_density": feature.activity_density,
+                            },
+                        )
+                        if alert.level != RiskLevel.LOW:
+                            db.insert_alert_event(
+                                alert_level=alert.level.value,
+                                message=alert.message,
+                                risk_score=deviation.mahalanobis_distance,
+                                person_id=self.person_id,
+                            )
 
                 time.sleep(inference_interval)
 

@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from src.alerts.engine import RiskLevel
+from src.inference.features import FeatureVector
 from src.inference.monitor import FallRiskMonitor
 from src.utils.keypoints import KeypointFrame, PoseKeypoint
-from src.inference.features import FeatureVector
 
 
 def _make_normal_pose(timestamp: float) -> KeypointFrame:
@@ -83,6 +84,71 @@ def test_monitor_pipeline_with_synthetic_data():
     print(f"  risk_level={status['current_risk_level']}")
     print(f"  baseline_ready={status['baseline_ready']}, samples={status['baseline_samples']}")
     print(f"  frames_valid={status['frames_valid']}")
+
+
+def test_monitor_pipeline_persists_to_db():
+    from unittest.mock import MagicMock, patch
+
+    from src.api.database import Database
+    from src.data.human_detector import DetectionBox
+
+    monitor = FallRiskMonitor()
+    person_id = "p0a_test"
+
+    for i in range(150):
+        monitor.baseline_manager.add_sample(
+            person_id,
+            FeatureVector(
+                1.5 + 0.05 * np.random.randn(),
+                0.6 + 0.02 * np.random.randn(),
+                2.0 + 0.3 * np.random.randn(),
+                0.5 + 0.05 * np.random.randn(),
+                timestamp=100.0 + i,
+            ),
+        )
+    baseline = monitor.baseline_manager.compute_baseline(person_id)
+    assert baseline.is_ready
+
+    kp_frame = _make_normal_pose(timestamp=200.0)
+
+    with patch("src.inference.monitor.VideoCapture") as mock_vc_cls:
+        mock_cap = MagicMock()
+        mock_cap.__enter__.return_value = mock_cap
+        mock_cap.frames.return_value = [
+            MagicMock(
+                frame=np.zeros((480, 640, 3), dtype=np.uint8),
+                timestamp=200.0 + i * 0.1,
+            )
+            for i in range(15)
+        ]
+        mock_vc_cls.return_value = mock_cap
+
+        orig_detect = monitor.human_detector.detect_best
+        orig_extract = monitor.keypoint_extractor.extract
+        try:
+            monitor.human_detector.detect_best = MagicMock(
+                return_value=DetectionBox(
+                    x1=0.1, y1=0.1, x2=0.9, y2=0.9, confidence=0.95,
+                )
+            )
+            monitor.keypoint_extractor.extract = MagicMock(return_value=kp_frame)
+
+            monitor.start(source="mock_source", person_id=person_id)
+            import time
+            time.sleep(4.0)
+            monitor.stop()
+
+            db = Database()
+            records = db.query_risk_records(person_id=person_id)
+            assert len(records) > 0
+
+            if monitor.status.last_alert and monitor.status.last_alert.level != RiskLevel.LOW:
+                alerts = db.query_alert_events(person_id=person_id)
+                assert len(alerts) > 0
+
+        finally:
+            monitor.human_detector.detect_best = orig_detect
+            monitor.keypoint_extractor.extract = orig_extract
 
 
 if __name__ == "__main__":
