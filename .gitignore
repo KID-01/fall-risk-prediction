@@ -38,6 +38,8 @@ data/video_clips/
 # ── AI 辅助文件 ──
 AGENTS.md
 CLAUDE.md
+.omo
+agent-docs/
 
 # ── IDE ──
 .vscode/

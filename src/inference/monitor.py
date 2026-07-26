@@ -19,6 +19,9 @@ from src.inference.deviation import DeviationDetector, DeviationResult
 from src.inference.features import FeatureCalculator, FeatureVector
 from src.utils.config import get_config
 from src.utils.keypoints import KeypointFrame
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 @dataclass
@@ -27,6 +30,7 @@ class MonitorStatus:
 
     is_running: bool = False
     person_id: str = "default"
+    device_id: str = "default"
     source: str = ""
     frames_processed: int = 0
     frames_valid: int = 0
@@ -59,6 +63,7 @@ class FallRiskMonitor:
 
         self.config = get_config()
         self.person_id = "default"
+        self.device_id = "default"
         self.status = MonitorStatus()
 
         # 核心组件
@@ -77,14 +82,16 @@ class FallRiskMonitor:
         self._keypoint_buffer: list[KeypointFrame] = []
         self._buffer_window = 30  # 特征计算窗口帧数
 
-    def start(self, source: str, person_id: str = "default") -> bool:
+    def start(self, source: str, person_id: str = "default", device_id: str = "default") -> bool:
         """启动监控"""
         if self.status.is_running:
             return False
 
         self.person_id = person_id
+        self.device_id = device_id
         self.status.source = source
         self.status.person_id = person_id
+        self.status.device_id = device_id
         self._stop_flag.clear()
 
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -105,6 +112,8 @@ class FallRiskMonitor:
     def _run(self):
         """监控主循环(在子线程运行)"""
         inference_interval = self.config.inference.inference_interval_ms / 1000
+        person_id = self.person_id
+        device_id = self.device_id
 
         with VideoCapture(source=self.status.source) as cap:
             self.video_capture = cap
@@ -163,25 +172,30 @@ class FallRiskMonitor:
                         self.status.current_risk_level = alert.level
 
                         # 阶段8: 持久化
-                        db = Database()
-                        db.insert_risk_record(
-                            risk_score=deviation.mahalanobis_distance,
-                            risk_level=alert.level.value,
-                            person_id=self.person_id,
-                            gait_features={
-                                "walking_rhythm": feature.walking_rhythm,
-                                "step_amplitude": feature.step_amplitude,
-                                "trunk_stability": feature.trunk_stability,
-                                "activity_density": feature.activity_density,
-                            },
-                        )
-                        if alert.level != RiskLevel.LOW:
-                            db.insert_alert_event(
-                                alert_level=alert.level.value,
-                                message=alert.message,
+                        try:
+                            db = Database()
+                            db.insert_risk_record(
                                 risk_score=deviation.mahalanobis_distance,
-                                person_id=self.person_id,
+                                risk_level=alert.level.value,
+                                person_id=person_id,
+                                device_id=device_id,
+                                gait_features={
+                                    "walking_rhythm": feature.walking_rhythm,
+                                    "step_amplitude": feature.step_amplitude,
+                                    "trunk_stability": feature.trunk_stability,
+                                    "activity_density": feature.activity_density,
+                                },
                             )
+                            if alert.level != RiskLevel.LOW:
+                                db.insert_alert_event(
+                                    alert_level=alert.level.value,
+                                    message=alert.message,
+                                    risk_score=deviation.mahalanobis_distance,
+                                    person_id=person_id,
+                                    device_id=device_id,
+                                )
+                        except Exception as e:
+                            log.error(f"持久化失败: {e}")
 
                 time.sleep(inference_interval)
 
@@ -190,6 +204,7 @@ class FallRiskMonitor:
         return {
             "is_running": self.status.is_running,
             "person_id": self.status.person_id,
+            "device_id": self.status.device_id,
             "source": self.status.source,
             "frames_processed": self.status.frames_processed,
             "frames_valid": self.status.frames_valid,

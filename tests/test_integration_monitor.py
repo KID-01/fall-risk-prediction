@@ -4,9 +4,14 @@
 """
 from __future__ import annotations
 
+import time
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 
-from src.alerts.engine import RiskLevel
+from src.alerts.engine import AlertEvent, RiskLevel
+from src.api.database import Database
+from src.data.human_detector import DetectionBox
 from src.inference.features import FeatureVector
 from src.inference.monitor import FallRiskMonitor
 from src.utils.keypoints import KeypointFrame, PoseKeypoint
@@ -87,11 +92,6 @@ def test_monitor_pipeline_with_synthetic_data():
 
 
 def test_monitor_pipeline_persists_to_db():
-    from unittest.mock import MagicMock, patch
-
-    from src.api.database import Database
-    from src.data.human_detector import DetectionBox
-
     monitor = FallRiskMonitor()
     person_id = "p0a_test"
 
@@ -134,8 +134,10 @@ def test_monitor_pipeline_persists_to_db():
             monitor.keypoint_extractor.extract = MagicMock(return_value=kp_frame)
 
             monitor.start(source="mock_source", person_id=person_id)
-            import time
-            time.sleep(4.0)
+            for _ in range(40):
+                if monitor.status.frames_processed >= 15:
+                    break
+                time.sleep(0.1)
             monitor.stop()
 
             db = Database()
@@ -149,8 +151,91 @@ def test_monitor_pipeline_persists_to_db():
         finally:
             monitor.human_detector.detect_best = orig_detect
             monitor.keypoint_extractor.extract = orig_extract
+            db = Database()
+            with db._get_conn() as conn:
+                conn.execute("DELETE FROM risk_records WHERE person_id=?", (person_id,))
+                conn.execute("DELETE FROM alert_events WHERE person_id=?", (person_id,))
+
+
+def test_monitor_pipeline_persists_alert_event_to_db():
+    monitor = FallRiskMonitor()
+    person_id = "p0a_alert_test"
+
+    # 构建基线 (150 样本)
+    for i in range(150):
+        monitor.baseline_manager.add_sample(
+            person_id,
+            FeatureVector(
+                1.5 + 0.05 * np.random.randn(),
+                0.6 + 0.02 * np.random.randn(),
+                2.0 + 0.3 * np.random.randn(),
+                0.5 + 0.05 * np.random.randn(),
+                timestamp=100.0 + i,
+            ),
+        )
+    baseline = monitor.baseline_manager.compute_baseline(person_id)
+    assert baseline.is_ready
+
+    kp_frame = _make_normal_pose(timestamp=200.0)
+
+    with patch("src.inference.monitor.VideoCapture") as mock_vc_cls:
+        mock_cap = MagicMock()
+        mock_cap.__enter__.return_value = mock_cap
+        mock_cap.frames.return_value = [
+            MagicMock(
+                frame=np.zeros((480, 640, 3), dtype=np.uint8),
+                timestamp=200.0 + i * 0.1,
+            )
+            for i in range(15)
+        ]
+        mock_vc_cls.return_value = mock_cap
+
+        orig_detect = monitor.human_detector.detect_best
+        orig_extract = monitor.keypoint_extractor.extract
+        orig_evaluate = monitor.alert_engine.evaluate
+        try:
+            monitor.human_detector.detect_best = MagicMock(
+                return_value=DetectionBox(
+                    x1=0.1, y1=0.1, x2=0.9, y2=0.9, confidence=0.95,
+                )
+            )
+            monitor.keypoint_extractor.extract = MagicMock(return_value=kp_frame)
+
+            # 强制 alert_engine.evaluate 返回 ATTENTION 级别
+            monitor.alert_engine.evaluate = MagicMock(
+                return_value=AlertEvent(
+                    level=RiskLevel.ATTENTION,
+                    timestamp=200.0,
+                    message="测试告警持久化",
+                )
+            )
+
+            monitor.start(source="mock_source", person_id=person_id)
+            for _ in range(40):
+                if monitor.status.frames_processed >= 15:
+                    break
+                time.sleep(0.1)
+            monitor.stop()
+
+            db = Database()
+            alerts = db.query_alert_events(person_id=person_id)
+            assert len(alerts) > 0, f"预期至少一条告警, 实际 {len(alerts)}"
+            assert alerts[0]["alert_level"] == "attention", (
+                f"预期 alert_level=attention, 实际 {alerts[0]['alert_level']}"
+            )
+
+        finally:
+            monitor.human_detector.detect_best = orig_detect
+            monitor.keypoint_extractor.extract = orig_extract
+            monitor.alert_engine.evaluate = orig_evaluate
+            db = Database()
+            with db._get_conn() as conn:
+                conn.execute("DELETE FROM risk_records WHERE person_id=?", (person_id,))
+                conn.execute("DELETE FROM alert_events WHERE person_id=?", (person_id,))
 
 
 if __name__ == "__main__":
     test_monitor_pipeline_with_synthetic_data()
+    test_monitor_pipeline_persists_to_db()
+    test_monitor_pipeline_persists_alert_event_to_db()
     print("✅ Monitor 集成测试全部通过!")
