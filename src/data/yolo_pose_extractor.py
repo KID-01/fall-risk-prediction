@@ -98,6 +98,9 @@ class YoloPoseExtractor:
         )
 
         h, w = video_frame.frame.shape[:2]
+        if w <= 0 or h <= 0:
+            log.warning(f"帧尺寸异常 ({w}x{h}), 跳过该帧")
+            return None
         for result in results:
             coco_kpts = self._pick_best_person(result)
             if coco_kpts is None:
@@ -105,9 +108,8 @@ class YoloPoseExtractor:
 
             keypoints = convert_coco_to_mediapipe(coco_kpts)
             # 归一化到 [0,1], 与 MediaPipe 输出语义一致
-            if w > 0 and h > 0:
-                keypoints[:, 0] /= w
-                keypoints[:, 1] /= h
+            keypoints[:, 0] /= w
+            keypoints[:, 1] /= h
 
             kp_frame = KeypointFrame(timestamp=video_frame.timestamp, keypoints=keypoints)
 
