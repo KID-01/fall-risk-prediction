@@ -17,15 +17,21 @@ _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+import scripts.validate_features  # noqa: E402
 from scripts.validate_features import (  # noqa: E402  -- sys.path 调整后导入 scripts/
     FEATURE_NAMES,
-    OUTPUT_DIR,
     _feature_params,
     correlation_analysis,
     generate_synthetic_features,
     shap_analysis,
     tsne_analysis,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_figure_output(tmp_path, monkeypatch):
+    """将图保存重定向到临时目录, 避免覆盖/删除 docs/figures 下的提交产物"""
+    monkeypatch.setattr("scripts.validate_features.OUTPUT_DIR", tmp_path)
 
 
 # ============================================================
@@ -204,42 +210,26 @@ class TestCorrelationAnalysis:
 # 文件保存
 # ============================================================
 class TestFigureSaving:
-    @pytest.fixture(autouse=True)
-    def setup_and_teardown(self):
-        """确保测试在 OUTPUT_DIR 中操作,测试后清理."""
-        self.figure_dir = OUTPUT_DIR
-        self.figure_dir.mkdir(parents=True, exist_ok=True)
-        yield
-        # 清理生成的测试文件
-        for f in [
-            "tsne_feature_space.png",
-            "shap_importance.png",
-            "correlation_matrix.png",
-        ]:
-            p = self.figure_dir / f
-            if p.exists():
-                p.unlink()
-
     def test_tsne_figure_saved(self):
-        """验证 t-SNE 图保存到正确路径."""
+        """验证 t-SNE 图保存到正确路径 (输出重定向到临时目录)."""
         x, y = generate_synthetic_features(n_per_level=50, seed=42)
         tsne_analysis(x, y)
-        path = self.figure_dir / "tsne_feature_space.png"
+        path = scripts.validate_features.OUTPUT_DIR / "tsne_feature_space.png"
         assert path.exists(), f"文件不存在: {path}"
         assert path.stat().st_size > 0, f"文件为空: {path}"
 
     def test_shap_figure_saved(self):
-        """验证 SHAP 图保存到正确路径."""
+        """验证 SHAP 图保存到正确路径 (输出重定向到临时目录)."""
         x, y = generate_synthetic_features(n_per_level=50, seed=43)
         shap_analysis(x, y)
-        path = self.figure_dir / "shap_importance.png"
+        path = scripts.validate_features.OUTPUT_DIR / "shap_importance.png"
         assert path.exists(), f"文件不存在: {path}"
         assert path.stat().st_size > 0, f"文件为空: {path}"
 
     def test_correlation_figure_saved(self):
-        """验证相关性热力图保存到正确路径."""
+        """验证相关性热力图保存到正确路径 (输出重定向到临时目录)."""
         x, y = generate_synthetic_features(n_per_level=50, seed=44)
         correlation_analysis(x, y)
-        path = self.figure_dir / "correlation_matrix.png"
+        path = scripts.validate_features.OUTPUT_DIR / "correlation_matrix.png"
         assert path.exists(), f"文件不存在: {path}"
         assert path.stat().st_size > 0, f"文件为空: {path}"
