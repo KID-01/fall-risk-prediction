@@ -8,8 +8,7 @@ DVC 用于对 `data/` 目录中的数据集（原始视频、关键点、标注�
 避免将大文件直接提交到 Git，从而让 Git 仓库保持轻量、数据集可回溯。
 
 - **被追踪内容**：`data/` 目录（通过 `data.dvc` 追踪）
-- **远程存储（Local Remote）**：`D:\WorkSpace\coding\fall-risk-prediction\dvc-storage`
-  （默认远程，名为 `storage`；已在 `.gitignore` 中忽略）
+- **远程存储（Local Remote）**：`dvc-storage/`（仓库根目录下的本地远程，默认名为 `storage`；已在 `.gitignore` 中忽略）
 - **安装方式**：`dvc` 已加入 `pyproject.toml` 的 `[project.optional-dependencies] dev` 列表
   （`dvc>=3.0.0`），并在项目虚拟环境 `venv` 中安装，通过 `venv\Scripts\dvc.exe` 调用。
 
@@ -96,14 +95,14 @@ dvc pull                         # 从远程拉取对应版本
 ## 6. 远程存储位置
 
 - **远程名称**：`storage`（默认远程）
-- **本地路径**：`D:\WorkSpace\coding\fall-risk-prediction\dvc-storage`
+- **本地路径**：`dvc-storage/`（仓库根目录；`../dvc-storage` 相对 `.dvc/` 解析，跨机器可移植）
 - **配置位置**：`.dvc/config`
 
 ```ini
 [core]
     remote = storage
 ['remote "storage"']
-    url = D:\WorkSpace\coding\fall-risk-prediction\dvc-storage
+    url = ../dvc-storage
 ```
 
 `dvc-storage/` 已加入 `.gitignore`，不会被提交到 Git。如需迁移到共享存储

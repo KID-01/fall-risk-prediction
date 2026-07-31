@@ -1,4 +1,4 @@
 [core]
     remote = storage
 ['remote "storage"']
-    url = D:\WorkSpace\coding\fall-risk-prediction\dvc-storage
+    url = ../dvc-storage
