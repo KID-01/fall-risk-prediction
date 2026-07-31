@@ -12,7 +12,7 @@ from src.alerts.engine import AlertEngine, AlertEvent, RiskLevel
 from src.api.database import Database
 from src.data.frame_filter import FrameFilter
 from src.data.human_detector import HumanDetector
-from src.data.keypoint_extractor import KeypointExtractor
+from src.data.keypoint_extractor import create_keypoint_extractor
 from src.data.video_capture import VideoCapture
 from src.inference.baseline import BaselineManager
 from src.inference.deviation import DeviationDetector, DeviationResult
@@ -69,7 +69,8 @@ class FallRiskMonitor:
         # 核心组件
         self.video_capture: VideoCapture | None = None
         self.human_detector = HumanDetector()
-        self.keypoint_extractor = KeypointExtractor()
+        self.pose_backend = self.config.pose_estimation.get("backend", "mediapipe")
+        self.keypoint_extractor = create_keypoint_extractor()
         self.frame_filter = FrameFilter()
         self.feature_calculator = FeatureCalculator()
         self.baseline_manager = BaselineManager()
@@ -122,10 +123,11 @@ class FallRiskMonitor:
                 if self._stop_flag.is_set():
                     break
 
-                # 阶段1: 人体检测
-                detection = self.human_detector.detect_best(video_frame.frame)
-                if detection is None:
-                    continue
+                # 阶段1: 人体检测 (yolo_pose 后端由姿态模型自带人体检测, 跳过此阶段)
+                if self.pose_backend != "yolo_pose":
+                    detection = self.human_detector.detect_best(video_frame.frame)
+                    if detection is None:
+                        continue
 
                 # 阶段2: 关键点提取
                 kp_frame = self.keypoint_extractor.extract(video_frame)

@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from src.data.video_capture import VideoFrame
+from src.data.yolo_pose_extractor import YoloPoseExtractor
 from src.utils.config import get_config
 from src.utils.keypoints import KeypointFrame
 
@@ -103,3 +104,16 @@ class KeypointExtractor:
 
     def __del__(self):
         self.close()
+
+
+# ==== 后端选择工厂 ====
+def create_keypoint_extractor() -> KeypointExtractor | YoloPoseExtractor:
+    """
+    根据配置 pose_estimation.backend 创建关键点提取器
+    "mediapipe" -> KeypointExtractor, "yolo_pose" -> YoloPoseExtractor
+    """
+    config = get_config()
+    backend = config.pose_estimation.get("backend", "mediapipe")
+    if backend == "yolo_pose":
+        return YoloPoseExtractor()
+    return KeypointExtractor()

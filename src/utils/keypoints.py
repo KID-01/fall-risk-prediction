@@ -75,6 +75,61 @@ HIP_KEYPOINTS = [PoseKeypoint.LEFT_HIP, PoseKeypoint.RIGHT_HIP]
 ANKLE_KEYPOINTS = [PoseKeypoint.LEFT_ANKLE, PoseKeypoint.RIGHT_ANKLE]
 
 
+# ==== COCO 17关键点 -> MediaPipe 33关键点 映射 ====
+# COCO 17点姿态关键点顺序(COCO keypoints):
+# 0鼻子 1左眼 2右眼 3左耳 4右耳 5左肩 6右肩 7左肘 8右肘 9左腕 10右腕
+# 11左髋 12右髋 13左膝 14右膝 15左踝 16右踝
+COCO_TO_MEDIAPIPE: dict[int, int] = {
+    # 上肢: 肩/肘/腕
+    5: PoseKeypoint.LEFT_SHOULDER,  # MP 11
+    6: PoseKeypoint.RIGHT_SHOULDER,  # MP 12
+    7: PoseKeypoint.LEFT_ELBOW,  # MP 13
+    8: PoseKeypoint.RIGHT_ELBOW,  # MP 14
+    9: PoseKeypoint.LEFT_WRIST,  # MP 15
+    10: PoseKeypoint.RIGHT_WRIST,  # MP 16
+    # 下肢: 髋/膝/踝
+    11: PoseKeypoint.LEFT_HIP,  # MP 23
+    12: PoseKeypoint.RIGHT_HIP,  # MP 24
+    13: PoseKeypoint.LEFT_KNEE,  # MP 25
+    14: PoseKeypoint.RIGHT_KNEE,  # MP 26
+    15: PoseKeypoint.LEFT_ANKLE,  # MP 27
+    16: PoseKeypoint.RIGHT_ANKLE,  # MP 28
+    # 脚部(COCO扩展点, 标准17点模型不输出, 兼容21点及以上模型)
+    17: PoseKeypoint.LEFT_HEEL,  # MP 29
+    18: PoseKeypoint.RIGHT_HEEL,  # MP 30
+    19: PoseKeypoint.LEFT_FOOT_INDEX,  # MP 31
+    20: PoseKeypoint.RIGHT_FOOT_INDEX,  # MP 32
+}
+
+
+def convert_coco_to_mediapipe(coco_kpts: np.ndarray) -> np.ndarray:
+    """
+    将COCO姿态关键点数组转换为MediaPipe 33点布局
+
+    Args:
+        coco_kpts: shape (N, 3) [x, y, conf] 或 (N, 4) [x, y, z, conf] 的COCO关键点数组
+    Returns:
+        shape (33, 4) [x, y, z, visibility] 的MediaPipe布局数组,
+        未映射点位(z=0, visibility=0)填充, 始终返回完整的33行
+    """
+    coco_kpts = np.asarray(coco_kpts, dtype=np.float32)
+    if coco_kpts.ndim != 2 or coco_kpts.shape[1] not in (3, 4):
+        raise ValueError(f"coco_kpts 应为 (N, 3/4) 数组, 实际 shape={coco_kpts.shape}")
+
+    if coco_kpts.shape[1] == 3:
+        data = np.zeros((coco_kpts.shape[0], 4), dtype=np.float32)
+        data[:, :2] = coco_kpts[:, :2]
+        data[:, 3] = coco_kpts[:, 2]
+    else:
+        data = coco_kpts[:, :4]
+
+    mp_kpts = np.zeros((33, 4), dtype=np.float32)
+    for coco_idx, mp_idx in COCO_TO_MEDIAPIPE.items():
+        if coco_idx < data.shape[0]:
+            mp_kpts[mp_idx] = data[coco_idx]
+    return mp_kpts
+
+
 @dataclass
 class KeypointFrame:
     """单帧关键点数据"""
