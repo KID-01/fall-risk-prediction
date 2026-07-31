@@ -37,6 +37,7 @@ from scripts.labelstudio_export import (  # noqa: E402
 )
 from scripts.labelstudio_import import (  # noqa: E402
     KEYPOINT_LABEL_NAMES,
+    _keypoint_map_from_json,
     build_label_config,
     frame_to_task,
     frames_to_tasks,
@@ -449,9 +450,19 @@ class TestMatchByFrameId:
     def test_matching_and_unmatched(self):
         a = [_sample(0, 0), _sample(1, 1), _sample(5, 0)]
         b = [_sample(0, 0), _sample(1, 0), _sample(2, 2)]
-        pairs, unmatched = match_by_frame_id(a, b)
+        pairs, unmatched, duplicates = match_by_frame_id(a, b)
         assert len(pairs) == 2
         assert unmatched == [2, 5]
+        assert duplicates == []
+
+    def test_duplicate_frames_reported(self):
+        # 同一 frame_id 在一份标注中出现多次: B 侧仅首次参与配对, 重复帧单独报告
+        a = [_sample(0, 0), _sample(0, 1), _sample(1, 0)]
+        b = [_sample(0, 0), _sample(1, 0), _sample(1, 1)]
+        pairs, unmatched, duplicates = match_by_frame_id(a, b)
+        assert len(pairs) == 3
+        assert unmatched == []
+        assert duplicates == [0, 1]
 
 
 class TestLoadAnnotationFile:
@@ -498,3 +509,85 @@ class TestComputeAgreement:
         assert report["n_matched"] == 2
         assert report["unmatched_frames"] == [2]
         assert report["fall_risk"]["n_agree"] == 1
+
+
+# ============================================================
+# 导入: 关键点预填充对齐 (H1 回归)
+# ============================================================
+class TestKeypointMapFromJson:
+    def test_keys_align_with_sample_interval(self, tmp_path):
+        """JSON 第 i 帧应对齐视频第 i*sample_interval 帧, 而非按序 0,1,2,..."""
+        path = tmp_path / "kps.json"
+        frames = [
+            {"timestamp": i * 0.1, "is_valid": True, "keypoints": _make_keypoint_frame(i)}
+            for i in range(3)
+        ]
+        path.write_text(
+            json.dumps({"source": "video_001.mp4", "fps": 10.0, "frames": frames}),
+            encoding="utf-8",
+        )
+        kp_map = _keypoint_map_from_json(str(path), sample_interval=5)
+        assert sorted(kp_map) == [0, 5, 10]
+
+    def test_interval_one_keeps_order(self, tmp_path):
+        """sample_interval=1 时退化为按序映射"""
+        path = tmp_path / "kps.json"
+        frames = [
+            {"timestamp": i * 0.1, "is_valid": True, "keypoints": _make_keypoint_frame(i)}
+            for i in range(2)
+        ]
+        path.write_text(
+            json.dumps({"source": "video_001.mp4", "fps": 10.0, "frames": frames}),
+            encoding="utf-8",
+        )
+        kp_map = _keypoint_map_from_json(str(path), sample_interval=1)
+        assert sorted(kp_map) == [0, 1]
+
+
+# ============================================================
+# 导出: skipped 标注处理
+# ============================================================
+class TestSkippedAnnotations:
+    def test_skipped_annotation_ignored(self):
+        task = {
+            "annotations": [
+                {
+                    "skipped": True,
+                    "result": [
+                        {
+                            "from_name": "fall_risk",
+                            "type": "choices",
+                            "value": {"choices": ["高危级"]},
+                        }
+                    ],
+                },
+                {
+                    "skipped": False,
+                    "result": [
+                        {
+                            "from_name": "fall_risk",
+                            "type": "choices",
+                            "value": {"choices": ["关注级"]},
+                        }
+                    ],
+                },
+            ]
+        }
+        assert extract_fall_risk_label(task) == LABEL_TO_LEVEL["关注级"]
+
+    def test_all_skipped_returns_none(self):
+        task = {
+            "annotations": [
+                {
+                    "skipped": True,
+                    "result": [
+                        {
+                            "from_name": "fall_risk",
+                            "type": "choices",
+                            "value": {"choices": ["高危级"]},
+                        }
+                    ],
+                }
+            ]
+        }
+        assert extract_fall_risk_label(task) is None

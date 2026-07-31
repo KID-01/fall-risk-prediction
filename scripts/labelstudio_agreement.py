@@ -104,16 +104,28 @@ def load_annotation_file(path: str) -> list[dict]:
 def match_by_frame_id(
     samples_a: list[dict],
     samples_b: list[dict],
-) -> tuple[list[tuple[dict, dict]], list[int]]:
+) -> tuple[list[tuple[dict, dict]], list[int], list[int]]:
     """
     按 frame_id 对齐两份标注
 
+    同一 frame_id 在一份标注中出现多次时仅取首次出现配对, 重复帧单独报告。
+
     Returns:
-        (配对列表 [(样本A, 样本B), ...], 未匹配的 frame_id 列表)
+        (配对列表 [(样本A, 样本B), ...], 未匹配的 frame_id 列表, 重复的 frame_id 列表)
     """
+    index_a: dict[int, list[dict]] = {}
     index_b: dict[int, list[dict]] = {}
+    for sample in samples_a:
+        index_a.setdefault(int(sample["frame_id"]), []).append(sample)
     for sample in samples_b:
         index_b.setdefault(int(sample["frame_id"]), []).append(sample)
+
+    duplicates = sorted({
+        frame_id
+        for samples in (index_a, index_b)
+        for frame_id, dup in samples.items()
+        if len(dup) > 1
+    })
 
     pairs: list[tuple[dict, dict]] = []
     matched: set[int] = set()
@@ -128,7 +140,7 @@ def match_by_frame_id(
         for s in samples_a + samples_b
         if int(s["frame_id"]) not in matched
     })
-    return pairs, unmatched
+    return pairs, unmatched, duplicates
 
 
 # ==== 一致性指标 ====
@@ -222,7 +234,12 @@ def compute_agreement(
     """加载两份标注文件并计算完整一致性报告"""
     samples_a = load_annotation_file(a_path)
     samples_b = load_annotation_file(b_path)
-    pairs, unmatched = match_by_frame_id(samples_a, samples_b)
+    pairs, unmatched, duplicates = match_by_frame_id(samples_a, samples_b)
+    if duplicates:
+        log.warning(
+            f"检测到重复 frame_id: {duplicates}, "
+            "配对时仅取每份标注中的首次出现, 请核查标注文件"
+        )
     return {
         "annotator_a": a_path,
         "annotator_b": b_path,
@@ -230,6 +247,7 @@ def compute_agreement(
         "n_b": len(samples_b),
         "n_matched": len(pairs),
         "unmatched_frames": unmatched,
+        "duplicate_frames": duplicates,
         "visibility_threshold": threshold,
         "fall_risk": fall_risk_agreement(pairs),
         "visibility": visibility_agreement(pairs, threshold),
@@ -264,6 +282,8 @@ def main() -> int:
     print(f"  标注 A: {args.a} ({report['n_a']} 条)")
     print(f"  标注 B: {args.b} ({report['n_b']} 条)")
     print(f"  按 frame_id 配对: {report['n_matched']} 条, 未匹配帧: {report['unmatched_frames']}")
+    if report["duplicate_frames"]:
+        print(f"  [警告] 重复 frame_id: {report['duplicate_frames']} (仅首次出现参与配对)")
     print(
         f"  风险等级 原始一致率: {fall_risk['raw_agreement']}  "
         f"(n={fall_risk['n']}, 一致 {fall_risk['n_agree']}, 跳过 {fall_risk['skipped']})"

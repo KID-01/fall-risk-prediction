@@ -93,8 +93,12 @@ def load_annotation_export(data: dict | str | Path) -> list[dict]:
 # ==== 标注提取 ====
 
 def _annotations_of(task: dict) -> list[dict]:
-    """返回任务中已完成标注的 annotation 列表"""
-    return task.get("annotations", []) or []
+    """返回任务中已完成标注的 annotation 列表 (跳过 LabelStudio skipped 的标注)"""
+    return [
+        annotation
+        for annotation in (task.get("annotations", []) or [])
+        if not annotation.get("skipped")
+    ]
 
 
 def extract_fall_risk_label(task: dict) -> int | None:

@@ -399,10 +399,27 @@ def tasks_from_video(
 
 # ==== 主入口 ====
 
-def _keypoint_map_from_json(path: str) -> dict[int, list[list[float]]]:
-    """从关键点 JSON 构建 {frame_id: keypoints} 映射 (video 模式预填充)"""
+def _positive_int(value: str) -> int:
+    """argparse 类型校验: 必须为正整数"""
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"必须是整数: {value!r}") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError(f"必须是正整数: {value}")
+    return parsed
+
+
+def _keypoint_map_from_json(
+    path: str, sample_interval: int = DEFAULT_SAMPLE_INTERVAL
+) -> dict[int, list[list[float]]]:
+    """从关键点 JSON 构建 {frame_id: keypoints} 映射 (video 模式预填充)
+
+    约定: JSON 第 i 帧对应视频第 i * sample_interval 帧 (需与抽样间隔一致),
+    因此映射键为 i * sample_interval, 与 extract_video_frames 产出的 frame_id 对齐。
+    """
     _source, _fps, frames = parse_keypoint_json(path)
-    return {i: f["keypoints"] for i, f in enumerate(frames)}
+    return {i * sample_interval: f["keypoints"] for i, f in enumerate(frames)}
 
 
 def main() -> int:
@@ -420,7 +437,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--clip-len",
-        type=int,
+        type=_positive_int,
         default=DEFAULT_CLIP_LEN,
         help=f"clips 模式片段长度 (帧数, 默认 {DEFAULT_CLIP_LEN})",
     )
@@ -428,7 +445,7 @@ def main() -> int:
     parser.add_argument("--image-url-base", default="", help="图片 URL 前缀 (LabelStudio 需可访问该地址)")
     parser.add_argument(
         "--sample-interval",
-        type=int,
+        type=_positive_int,
         default=DEFAULT_SAMPLE_INTERVAL,
         help=f"video 模式帧采样间隔 (默认每 {DEFAULT_SAMPLE_INTERVAL} 帧取 1 帧)",
     )
@@ -447,7 +464,8 @@ def main() -> int:
     parser.add_argument(
         "--keypoints",
         default="",
-        help="(video 模式可选) 关键点 JSON, 按帧序预填充到任务",
+        help="(video 模式可选) 关键点 JSON, 按帧序预填充到任务 "
+        "(JSON 第 i 帧对应视频第 i×sample-interval 帧)",
     )
     parser.add_argument(
         "--emit-label-config",
@@ -480,7 +498,7 @@ def main() -> int:
             return 1
         keypoint_map: dict[int, list[list[float]]] = {}
         if args.keypoints:
-            keypoint_map = _keypoint_map_from_json(args.keypoints)
+            keypoint_map = _keypoint_map_from_json(args.keypoints, args.sample_interval)
         for video_path in video_paths:
             video_tasks = tasks_from_video(
                 str(video_path),
