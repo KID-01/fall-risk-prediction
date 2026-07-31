@@ -68,6 +68,7 @@ Thumbs.db
 # ── DVC ──
 .dvc/cache/
 .dvc/tmp/
+dvc-storage/
 
 # ── Docker ──
 docker-compose.override.yml
@@ -87,3 +88,4 @@ npm-debug.log*
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+/data
