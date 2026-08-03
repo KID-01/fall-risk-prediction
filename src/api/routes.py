@@ -20,6 +20,7 @@ log = get_logger(__name__)
 class MonitorStartRequest(BaseModel):
     source: str = "0"
     person_id: str = "default"
+    device_id: str = "default"
 
 
 class PredictRequest(BaseModel):
@@ -38,10 +39,10 @@ async def stream_start(req: MonitorStartRequest):
     """启动实时视频流分析"""
     if monitor.status.is_running:
         raise HTTPException(status_code=409, detail="监控已在运行中,请先停止")
-    success = monitor.start(source=req.source, person_id=req.person_id)
+    success = monitor.start(source=req.source, person_id=req.person_id, device_id=req.device_id)
     if not success:
         raise HTTPException(status_code=500, detail="启动失败")
-    return {"code": 200, "message": "监控已启动", "source": req.source, "person_id": req.person_id}
+    return {"code": 200, "message": "监控已启动", "source": req.source, "person_id": req.person_id, "device_id": req.device_id}
 
 
 @monitor_router.post("/stream/stop")

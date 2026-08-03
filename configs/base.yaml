@@ -39,8 +39,8 @@ human_detection:
 
 # ── 姿态估计 (第二阶段) ──
 pose_estimation:
-  backend: "mediapipe"                  # 关键点提取后端: mediapipe | yolo_pose
-  model_type: "mediapipe_pose_lite"      # MediaPipe Pose Lite
+  backend: "yolo_pose"                   # 关键点提取后端: mediapipe | yolo_pose
+  model_type: "yolov8n-pose"             # YOLOv8n-Pose (自动下载)
   model_complexity: 0                    # 0=Lite, 1=Full, 2=Heavy
   num_keypoints: 33
   confidence_threshold: 0.5              # visibility > 0.5 才保留
