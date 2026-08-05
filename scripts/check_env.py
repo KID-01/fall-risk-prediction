@@ -10,7 +10,7 @@ def check_python_version() -> bool:
     """检查Python版本 >= 3.10"""
     version = sys.version_info
     ok = version >= (3, 10)
-    status = "✓" if ok else "✗"
+    status = "OK" if ok else "FAIL"
     print(f"  [{status}] Python版本: {version.major}.{version.minor}.{version.micro} (需要 >= 3.10)")
     return ok
 
@@ -22,10 +22,10 @@ def check_package(name: str, import_name: str | None = None) -> bool:
     try:
         pkg = __import__(import_name)
         version = getattr(pkg, "__version__", "已安装")
-        print(f"  [✓] {name} ({version})")
+        print(f"  [OK] {name} ({version})")
         return True
     except ImportError:
-        print(f"  [✗] {name} — 未安装！请运行: pip install {name}")
+        print(f"  [FAIL] {name} — 未安装！请运行: pip install {name}")
         return False
 
 
@@ -36,13 +36,13 @@ def check_cuda() -> bool:
         if torch.cuda.is_available():
             device_count = torch.cuda.device_count()
             device_name = torch.cuda.get_device_name(0)
-            print(f"  [✓] CUDA可用: {device_count}个GPU — {device_name}")
+            print(f"  [OK] CUDA可用: {device_count}个GPU — {device_name}")
             return True
         else:
-            print(f"  [⚠] CUDA不可用，将使用CPU模式（推理速度会较慢）")
+            print(f"  [WARN] CUDA不可用，将使用CPU模式（推理速度会较慢）")
             return False
     except ImportError:
-        print(f"  [✗] PyTorch未安装，无法检查CUDA")
+        print(f"  [FAIL] PyTorch未安装，无法检查CUDA")
         return False
 
 
@@ -95,10 +95,10 @@ def main():
     passed = sum(results)
     total = len(results)
     if all(results):
-        print(f"  ✓ 全部通过！({passed}/{total}) 环境就绪，可以开始开发")
+        print(f"  [OK] 全部通过！({passed}/{total}) 环境就绪，可以开始开发")
     else:
         failed = total - passed
-        print(f"  ⚠ {passed}/{total} 通过，{failed} 项需要修复")
+        print(f"  [WARN] {passed}/{total} 通过，{failed} 项需要修复")
         print(f"  运行 pip install -e . 安装缺失的依赖")
     print("=" * 50)
 
