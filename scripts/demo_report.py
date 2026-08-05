@@ -63,7 +63,7 @@ def start_monitor(source: str, person_id: str = "demo_user", device_id: str = "d
 
         # 3. 重置基线
         print("\n[3] 重置个体化基线...")
-        resp = client.post(f"{API_BASE}/baseline/reset")
+        resp = client.post(f"{API_BASE}/baseline/reset", params={"person_id": person_id})
         print(f"    {resp.json()}")
 
         # 4. 启动监控
@@ -122,6 +122,9 @@ def start_monitor(source: str, person_id: str = "demo_user", device_id: str = "d
                     f"[{alert.get('message', '')}]"
                 )
 
+            # 本地视频读完后后端会将 is_running 置为 False，立即结束轮询。
+            if not status.get("is_running", False):
+                break
             time.sleep(3)
 
         # 6. 停止监控

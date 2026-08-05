@@ -147,6 +147,12 @@ class DeviationDetector:
         self.short_term = ShortTermDetector()
         self.long_term = LongTermDetector()
 
+    def reset(self):
+        """清空跨视频缓存，保留检测器对象以便外部注入/扩展。"""
+        self.short_term._window_buffer.clear()
+        self.short_term._consecutive_count = 0
+        self.long_term._daily_means.clear()
+
     def check(
         self,
         feature: FeatureVector,

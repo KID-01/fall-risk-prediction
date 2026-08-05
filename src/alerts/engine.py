@@ -14,6 +14,8 @@ from datetime import datetime
 from enum import Enum
 from collections.abc import Callable
 
+import numpy as np
+
 from src.inference.deviation import DeviationLevel, DeviationResult
 from src.utils.config import get_config
 
@@ -70,6 +72,9 @@ class AlertEngine:
         config = get_config()
         alert_cfg = config.alert
         self.short_term_freq_threshold = alert_cfg.short_term_freq_threshold
+        # 短期检测确认后，极端偏离应直接进入高危级，而不是等待频次计数。
+        self.severe_deviation_distance = config.deviation.short_term.threshold * 2
+        self.severe_deviation_z = 6.0
         self.inactivity_threshold_minutes = alert_cfg.inactivity_threshold_minutes
         self.video_clip_enabled = alert_cfg.video_clip.enabled
         self.video_clip_before = alert_cfg.video_clip.before_seconds
@@ -89,6 +94,13 @@ class AlertEngine:
     def register_action(self, level: RiskLevel, action: AlertAction):
         """注册某等级的响应动作"""
         self._actions[level].append(action)
+
+    def reset(self):
+        """清空跨视频计数和事件，保留已注册的通知动作。"""
+        self._short_term_count_hourly = 0
+        self._last_reset_time = 0.0
+        self._last_activity_time = 0.0
+        self._event_log.clear()
 
     def evaluate(
         self,
@@ -130,6 +142,17 @@ class AlertEngine:
         elif deviation.level == DeviationLevel.BOTH:
             level = RiskLevel.CRITICAL
             message = f"短期异常与长期下降同时触发: {deviation.detail}"
+        elif deviation.level == DeviationLevel.SHORT_TERM:
+            max_abs_z = float(np.max(np.abs(deviation.z_scores)))
+            if (
+                deviation.mahalanobis_distance >= self.severe_deviation_distance
+                or max_abs_z >= self.severe_deviation_z
+            ):
+                level = RiskLevel.CRITICAL
+                message = f"严重短期异常，需立即确认: {deviation.detail}"
+            else:
+                level = RiskLevel.ATTENTION
+                message = f"短期异常，建议关注: {deviation.detail}"
         elif deviation.long_term_triggered:
             level = RiskLevel.WARNING
             message = f"长期趋势下降: {deviation.detail}"

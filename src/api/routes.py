@@ -78,10 +78,10 @@ async def risk_history(
 
 
 @monitor_router.post("/baseline/reset")
-async def baseline_reset():
+async def baseline_reset(person_id: str | None = None):
     """重置个体化基线"""
-    monitor.reset_baseline()
-    return {"code": 200, "message": "基线已重置"}
+    monitor.reset_baseline(person_id)
+    return {"code": 200, "message": "基线已重置", "person_id": person_id or monitor.person_id}
 
 
 # ── 告警路由 ──
