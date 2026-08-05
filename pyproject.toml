@@ -47,6 +47,7 @@ dependencies = [
     # ── 可视化 ──
     "matplotlib>=3.8.0",
     "seaborn>=0.13.0",
+    "shap>=0.45.0",
 
     # ── 工具 ──
     "tqdm>=4.66.0",

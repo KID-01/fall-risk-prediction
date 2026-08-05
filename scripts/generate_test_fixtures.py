@@ -66,8 +66,9 @@ def _synthetic_sequence(seq_len: int, sample_index: int, rng: np.random.Generato
     sequence[:, 28, 0] -= step
     sequence += rng.normal(0.0, 0.0025, size=sequence.shape).astype(np.float32)
     sequence = np.clip(sequence, 0.0, 1.0)
+    depth = np.zeros((seq_len, 33, 1), dtype=np.float32)
     confidence = np.full((seq_len, 33, 1), 0.95, dtype=np.float32)
-    return np.concatenate([sequence, confidence], axis=-1)
+    return np.concatenate([sequence, depth, confidence], axis=-1)
 
 
 def generate_keypoints(output_dir: Path, labels_path: Path, samples: int, seq_len: int, seed: int) -> None:
