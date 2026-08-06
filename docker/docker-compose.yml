@@ -3,8 +3,6 @@
 # 一键启动: docker-compose -f docker/docker-compose.yml up -d
 # ============================================================
 
-version: "3.8"
-
 services:
   # ── API 服务 ──
   api:

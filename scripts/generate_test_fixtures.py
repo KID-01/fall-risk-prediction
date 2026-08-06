@@ -27,7 +27,7 @@ def _write_npy(path: Path, array: np.ndarray) -> None:
     array = np.asarray(array, dtype=np.float32, order="C")
     header = repr(
         {"descr": "<f4", "fortran_order": False, "shape": tuple(array.shape)}
-    ).replace("'", "'")
+    )
     header_bytes = (header + " " * (64 - ((10 + len(header) + 1) % 64)) + "\n").encode(
         "latin1"
     )

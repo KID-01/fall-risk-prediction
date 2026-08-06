@@ -15,6 +15,9 @@ from typing import Sequence
 import numpy as np
 
 from src.utils.keypoints import KeypointFrame, PoseKeypoint
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 @dataclass
@@ -250,8 +253,8 @@ class FeatureCalculator:
         try:
             from src.utils.config import get_config
             config = get_config()
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("特征配置加载失败, 使用默认阈值: %s", e)
 
         if config is not None:
             wr = config.features.walking_rhythm

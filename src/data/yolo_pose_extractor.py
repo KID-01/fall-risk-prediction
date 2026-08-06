@@ -34,7 +34,7 @@ class YoloPoseExtractor:
         self.device = device or config.human_detection.device
         self._model = None
 
-    def _ensure_model(self):
+    def _ensure_model(self) -> None:
         """延迟加载YOLOv8n-pose模型(缺失时自动下载到 checkpoints/)"""
         if self._model is not None:
             return
@@ -49,7 +49,7 @@ class YoloPoseExtractor:
         self._model = YOLO(str(model_path))
 
     @staticmethod
-    def _download_model(model_path: Path):
+    def _download_model(model_path: Path) -> None:
         """下载yolov8n-pose模型到指定路径"""
         log.warning(f"模型不存在, 开始下载: {model_path.name}")
         model_path.parent.mkdir(parents=True, exist_ok=True)

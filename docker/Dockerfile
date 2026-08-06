@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # 先安装依赖 (利用 Docker 层缓存)
-COPY pyproject.toml Makefile ./
+COPY pyproject.toml ./
 RUN pip install --no-cache-dir -e "."
 
 # 拷贝源码

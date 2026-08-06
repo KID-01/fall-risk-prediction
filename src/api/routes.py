@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -66,7 +68,6 @@ async def risk_history(
     offset: int = 0,
 ):
     """历史风险记录(分页)"""
-    import time
     start_time = time.time() - hours * 3600
     records = db.query_risk_records(
         person_id=person_id,
@@ -99,7 +100,6 @@ async def get_alerts(
     offset: int = 0,
 ):
     """查询告警历史"""
-    import time
     start_time = time.time() - hours * 3600
     alerts = db.query_alert_events(
         alert_level=level,

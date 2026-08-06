@@ -6,7 +6,7 @@
 #       make serve     (启动API服务)
 # ============================================================
 
-.PHONY: help install install-dev setup check test lint format clean train serve docker-build docker-up docker-down
+.PHONY: help install install-dev setup check test test-cov lint format clean train serve docker-build docker-up docker-down
 
 # ── 默认目标：显示帮助 ──
 help:
