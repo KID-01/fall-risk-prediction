@@ -22,6 +22,8 @@ export default function App() {
   const [riskHistory, setRiskHistory] = useState([])
   const [stats, setStats] = useState({})
   const [connected, setConnected] = useState(false)
+  const [source, setSource] = useState(() => localStorage.getItem('monitor_source') || 'rtmp://rtmp01open.ys7.com:1935/v3/openlive/BK8392637_1_1')
+  const [personId, setPersonId] = useState(() => localStorage.getItem('monitor_person_id') || 'default')
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('theme')
     return saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
@@ -197,9 +199,11 @@ export default function App() {
 
   // ── 控制操作 ──
   const startMonitor = async () => {
+    localStorage.setItem('monitor_source', source)
+    localStorage.setItem('monitor_person_id', personId)
     await fetch(`${API_BASE}/stream/start`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: '0', person_id: 'default' }),
+      body: JSON.stringify({ source, person_id: personId }),
     })
     fetchStatus()
   }
@@ -238,15 +242,33 @@ export default function App() {
 
       {/* ── 控制按钮 ── */}
       <div className="controls">
-        <button className="btn btn-primary" onClick={startMonitor} disabled={status.is_running}>
-          ▶ 启动监控
-        </button>
-        <button className="btn btn-danger" onClick={stopMonitor} disabled={!status.is_running}>
-          ■ 停止监控
-        </button>
-        <button className="btn btn-secondary" onClick={resetBaseline}>
-          ↻ 重置基线
-        </button>
+        <div className="control-inputs">
+          <input
+            className="input-source"
+            type="text"
+            placeholder="RTMP/RTSP 视频源地址"
+            value={source}
+            onChange={e => setSource(e.target.value)}
+          />
+          <input
+            className="input-person"
+            type="text"
+            placeholder="被监测人 ID"
+            value={personId}
+            onChange={e => setPersonId(e.target.value)}
+          />
+        </div>
+        <div className="control-buttons">
+          <button className="btn btn-primary" onClick={startMonitor} disabled={status.is_running}>
+            ▶ 启动监控
+          </button>
+          <button className="btn btn-danger" onClick={stopMonitor} disabled={!status.is_running}>
+            ■ 停止监控
+          </button>
+          <button className="btn btn-secondary" onClick={resetBaseline}>
+            ↻ 重置基线
+          </button>
+        </div>
       </div>
 
       {/* ── 风险等级大卡片 ── */}

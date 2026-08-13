@@ -27,7 +27,7 @@ BASE_URL = "https://open.ys7.com"
 API_TOKEN = f"{BASE_URL}/api/lapp/token/get"
 API_DEVICE_LIST = f"{BASE_URL}/api/lapp/device/list"
 API_DEVICE_INFO = f"{BASE_URL}/api/lapp/device/info"
-API_LIVE_ADDRESS = f"{BASE_URL}/api/lapp/live/address/get"
+API_LIVE_ADDRESS = f"{BASE_URL}/api/lapp/v2/live/address/get"
 API_PTZ_START = f"{BASE_URL}/api/lapp/device/ptz/start"
 API_PTZ_STOP = f"{BASE_URL}/api/lapp/device/ptz/stop"
 
@@ -269,7 +269,8 @@ class EzvizClient:
                     API_LIVE_ADDRESS,
                     data={
                         "accessToken": token,
-                        "source": f"{device_serial}:{channel_no}",
+                        "deviceSerial": device_serial,
+                        "channelNo": channel_no,
                         "protocol": protocol,
                     },
                 )
@@ -280,7 +281,14 @@ class EzvizClient:
                     logger.error(f"获取直播地址失败: {data.get('msg')}")
                     return None
 
-                url = data["data"].get("url", "")
+                # v2 API: data 是 dict，包含 url 字段
+                raw = data["data"]
+                if isinstance(raw, dict):
+                    url = raw.get("url", "")
+                elif isinstance(raw, list) and raw:
+                    url = raw[0].get("url", "") if isinstance(raw[0], dict) else str(raw[0])
+                else:
+                    url = str(raw) if raw else ""
                 logger.info(f"获取到 {proto_name} 直播地址: {url[:50]}...")
                 return url
 

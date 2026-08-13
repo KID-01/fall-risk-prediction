@@ -140,16 +140,17 @@ class FallRiskMonitor:
                     if self.pose_backend != "yolo_pose":
                         detection = self.human_detector.detect_best(video_frame.frame)
                         if detection is None:
+                            self.status.frames_processed += 1
                             continue
 
                     # 阶段2: 关键点提取
+                    self.status.frames_processed += 1
                     kp_frame = self.keypoint_extractor.extract(video_frame)
                     if kp_frame is None:
                         continue
 
                     # 阶段3: 帧质量过滤
                     self.frame_filter.filter(kp_frame)
-                    self.status.frames_processed += 1
 
                     if not kp_frame.is_valid:
                         continue

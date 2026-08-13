@@ -13,6 +13,9 @@ import cv2
 import numpy as np
 
 from src.utils.config import get_config
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 
 @dataclass
@@ -51,13 +54,16 @@ class VideoCapture:
 
     def open(self) -> bool:
         """打开视频源"""
-        # RTSP流需要降低延迟
-        if self.source.startswith("rtsp"):
+        is_network = self.source.startswith("rtsp") or self.source.startswith("rtmp")
+        log.info(f"连接视频源: {self.source[:60]}...")
+        if is_network:
             self._cap = cv2.VideoCapture(self.source, cv2.CAP_FFMPEG)
             self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)
         else:
             self._cap = cv2.VideoCapture(self.source)
-        return self._cap is not None and self._cap.isOpened()
+        ok = self._cap is not None and self._cap.isOpened()
+        log.info(f"视频源连接{'成功' if ok else '失败'}")
+        return ok
 
     def _should_sample(self) -> bool:
         """根据采样帧率判断是否处理当前帧"""
@@ -69,19 +75,51 @@ class VideoCapture:
         return False
 
     def read_frame(self) -> VideoFrame | None:
-        """读取一帧(按采样率)"""
-        if self._cap is None or not self._cap.isOpened():
+        """读取一帧(按采样率)。网络流耗尽时自动重连。"""
+        if self._cap is None:
             return None
 
-        # 跳帧以匹配采样率
+        is_network = self.source.startswith("rtmp") or self.source.startswith("rtsp")
+
+        max_retries = 30
+        retries = 0
         while True:
+            if not self._cap.isOpened():
+                # 网络流自动重连
+                if is_network:
+                    self._cap.release()
+                    if not self.open():
+                        return None
+                    continue
+                return None
+
             ret, frame = self._cap.read()
             if not ret:
-                return None
+                retries += 1
+                if retries > max_retries:
+                    if is_network:
+                        # 网络流耗尽, 自动重连
+                        log.info("RTMP 流耗尽, 自动重连...")
+                        self._cap.release()
+                        if not self.open():
+                            return None
+                        retries = 0
+                        continue
+                    return None
+                time.sleep(0.1)
+                continue
+            retries = 0
+
             if self._start_time is None:
                 self._start_time = time.time()
-            if self._should_sample():
-                break
+
+            if is_network:
+                if self._should_sample():
+                    break
+                time.sleep(0.02)
+            else:
+                if self._should_sample():
+                    break
 
         timestamp = time.time() - (self._start_time or 0)
         video_frame = VideoFrame(
@@ -106,8 +144,10 @@ class VideoCapture:
 
     def frames(self) -> Iterator[VideoFrame]:
         """迭代器: 持续读取帧直到流结束"""
-        if not self.open():
-            raise RuntimeError(f"无法打开视频源: {self.source}")
+        if self._cap is None or not self._cap.isOpened():
+            if not self.open():
+                raise RuntimeError(f"无法打开视频源: {self.source}")
+        log.info("开始读取视频帧...")
         try:
             while True:
                 frame = self.read_frame()
@@ -124,7 +164,6 @@ class VideoCapture:
             self._cap = None
 
     def __enter__(self):
-        self.open()
         return self
 
     def __exit__(self, *args):
