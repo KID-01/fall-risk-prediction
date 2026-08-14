@@ -39,10 +39,10 @@ def check_cuda() -> bool:
             print(f"  [OK] CUDA可用: {device_count}个GPU — {device_name}")
             return True
         else:
-            print(f"  [WARN] CUDA不可用，将使用CPU模式（推理速度会较慢）")
+            print("  [WARN] CUDA不可用，将使用CPU模式（推理速度会较慢）")
             return False
     except ImportError:
-        print(f"  [FAIL] PyTorch未安装，无法检查CUDA")
+        print("  [FAIL] PyTorch未安装，无法检查CUDA")
         return False
 
 
@@ -99,7 +99,7 @@ def main():
     else:
         failed = total - passed
         print(f"  [WARN] {passed}/{total} 通过，{failed} 项需要修复")
-        print(f"  运行 pip install -e . 安装缺失的依赖")
+        print("  运行 pip install -e . 安装缺失的依赖")
     print("=" * 50)
 
 

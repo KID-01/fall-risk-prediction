@@ -8,7 +8,6 @@ import argparse
 from pathlib import Path
 
 import cv2
-import numpy as np
 
 from src.data.preprocess import PreprocessPipeline
 from src.data.video_capture import VideoCapture

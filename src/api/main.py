@@ -23,13 +23,13 @@ API 路由 (RESTful + WebSocket):
   WS   /ws/alerts                     WebSocket 实时告警推送
 """
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from omegaconf import OmegaConf
-from pathlib import Path
 
 from src.api.routes import alerts_router, monitor_router, stats_router
 from src.api.websocket import websocket_endpoint

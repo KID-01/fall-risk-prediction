@@ -3,11 +3,10 @@ WebSocket 实时推送服务 — 告警实时推送到前端
 """
 from __future__ import annotations
 
-import asyncio
 import json
-from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
+
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)

@@ -8,24 +8,25 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-import pytest
 
-from src.inference.features import (
-    FeatureVector,
-    WalkingRhythmCalculator,
-    StepAmplitudeCalculator,
-    TrunkStabilityCalculator,
-    ActivityDensityCalculator,
-    FeatureCalculator,
-)
-from src.inference.baseline import IndividualBaseline, BaselineManager
+from src.alerts.engine import AlertEngine, AlertEvent, RiskLevel
+from src.inference.baseline import BaselineManager, IndividualBaseline
 from src.inference.deviation import (
-    ShortTermDetector,
-    LongTermDetector,
     DeviationDetector,
     DeviationLevel,
+    DeviationResult,
+    LongTermDetector,
+    ShortTermDetector,
 )
-from src.alerts.engine import AlertEngine, RiskLevel, AlertEvent
+from src.inference.features import (
+    ActivityDensityCalculator,
+    FeatureCalculator,
+    FeatureVector,
+    StepAmplitudeCalculator,
+    TrunkStabilityCalculator,
+    WalkingRhythmCalculator,
+)
+from src.utils.keypoints import KeypointFrame, PoseKeypoint
 
 
 # ============================================================
@@ -42,10 +43,8 @@ def _make_frame(
     right_ankle: tuple[float, float] = (0.55, 0.9),
     visibility: float = 0.9,
     is_valid: bool = True,
-) -> "KeypointFrame":
+) -> KeypointFrame:
     """构造测试用关键点帧"""
-    from src.utils.keypoints import KeypointFrame, PoseKeypoint
-
     kps = np.zeros((33, 4))
     # 设默认可见
     kps[:, 3] = visibility
@@ -107,7 +106,7 @@ class TestWalkingRhythmCalculator:
         frames = []
         freq_hz = 2.0
         t = 0.0
-        for i in range(200):
+        for _ in range(200):
             y_offset = 0.05 * math.sin(2 * math.pi * freq_hz * t)
             hip_y = 0.6 + y_offset
             frames.append(_make_frame(
@@ -491,8 +490,7 @@ class TestAlertEngine:
             is_ready=True,
         )
 
-    def _make_deviation(self, level: DeviationLevel) -> "DeviationResult":
-        from src.inference.deviation import DeviationResult
+    def _make_deviation(self, level: DeviationLevel) -> DeviationResult:
         return DeviationResult(
             level=level,
             short_term_triggered=(level in (DeviationLevel.SHORT_TERM, DeviationLevel.BOTH)),

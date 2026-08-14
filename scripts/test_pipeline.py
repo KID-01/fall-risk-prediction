@@ -3,8 +3,8 @@
 测试: 特征计算 → 基线建立 → 偏离检测 → 预警引擎
 运行: python scripts/test_pipeline.py
 """
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -13,7 +13,7 @@ import numpy as np
 from src.alerts.engine import AlertEngine, RiskLevel
 from src.inference.baseline import BaselineManager
 from src.inference.deviation import DeviationDetector
-from src.inference.features import FeatureCalculator, FeatureVector
+from src.inference.features import FeatureCalculator
 from src.utils.keypoints import KeypointFrame, PoseKeypoint
 
 
@@ -84,7 +84,7 @@ def test_features():
     calc = FeatureCalculator()
     normal_feat = calc.calculate(normal_frames)
 
-    print(f"  [正常行走]")
+    print("  [正常行走]")
     print(f"    行走节拍频率: {normal_feat.walking_rhythm:.3f} Hz (期望~1.5)")
     print(f"    步幅相对幅度: {normal_feat.step_amplitude:.4f}")
     print(f"    躯干稳定指数: {normal_feat.trunk_stability:.2f} 度")
@@ -94,7 +94,7 @@ def test_features():
     unstable_frames = generate_walking_sequence(duration_s=6.0, unstable=True)
     unstable_feat = calc.calculate(unstable_frames)
 
-    print(f"\n  [不稳定行走]")
+    print("\n  [不稳定行走]")
     print(f"    行走节拍频率: {unstable_feat.walking_rhythm:.3f} Hz")
     print(f"    步幅相对幅度: {unstable_feat.step_amplitude:.4f}")
     print(f"    躯干稳定指数: {unstable_feat.trunk_stability:.2f} 度 (期望>正常)")
@@ -195,7 +195,7 @@ def test_deviation_and_alerts(baseline):
     if non_low:
         print(f"  [OK] 成功触发预警: {len(non_low)} 个非低风险事件")
     else:
-        print(f"  [!] 未触发预警(可能需要更多异常数据或调整阈值)")
+        print("  [!] 未触发预警(可能需要更多异常数据或调整阈值)")
 
     return engine
 

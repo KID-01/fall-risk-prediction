@@ -3,7 +3,7 @@ T1.3 验证脚本 — 萤石开放平台 SDK 集成测试
 
 运行方式:
     cd e:\fengxian\fall-risk-prediction
-    venv\Scripts\python.exe scripts\test_ezviz.py
+    venv\\Scripts\\python.exe scripts\test_ezviz.py
 
 使用方法:
     1. 先用浏览器登录 https://open.ys7.com

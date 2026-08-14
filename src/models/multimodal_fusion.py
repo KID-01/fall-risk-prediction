@@ -97,8 +97,6 @@ class MultiModalFusion(nn.Module):
         Returns:
             fused: (B, 256)
         """
-        B = temporal_feat.size(0)
-
         # 投影
         q = self.temporal_proj(temporal_feat).unsqueeze(1)  # (B, 1, 256)
 

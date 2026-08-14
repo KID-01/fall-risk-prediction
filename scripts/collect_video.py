@@ -16,7 +16,6 @@ from pathlib import Path
 import cv2
 
 from src.data.video_capture import VideoCapture
-from src.utils.config import get_config
 from src.utils.logger import get_logger, setup_logging
 
 log = get_logger(__name__)

@@ -10,15 +10,14 @@
 """
 from __future__ import annotations
 
-import time
 import asyncio
+import time
 from pathlib import Path
 from typing import Any
 
 import httpx
 from loguru import logger
 from omegaconf import OmegaConf
-
 
 # ============================================================
 # 萤石开放平台 API 端点
