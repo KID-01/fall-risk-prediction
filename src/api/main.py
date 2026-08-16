@@ -32,7 +32,7 @@ from fastapi.staticfiles import StaticFiles
 from omegaconf import OmegaConf
 
 from src.api.routes import alerts_router, monitor_router, stats_router
-from src.api.websocket import websocket_endpoint
+from src.api.websocket import websocket_endpoint, video_websocket_endpoint
 from src.utils.config import get_config
 from src.utils.logger import get_logger, setup_logging
 
@@ -74,6 +74,7 @@ app.include_router(stats_router)
 
 # ── WebSocket ──
 app.websocket("/ws/alerts")(websocket_endpoint)
+app.websocket("/ws/video")(video_websocket_endpoint)
 
 
 # ── 基础端点 ──

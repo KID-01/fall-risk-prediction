@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from src.alerts.engine import AlertEngine, AlertEvent, RiskLevel
 from src.api.database import Database
+from src.api.websocket import video_manager
 from src.data.frame_filter import FrameFilter
 from src.data.human_detector import HumanDetector
 from src.data.keypoint_extractor import create_keypoint_extractor
@@ -18,6 +19,7 @@ from src.inference.baseline import BaselineManager
 from src.inference.deviation import DeviationDetector, DeviationResult
 from src.inference.features import FeatureCalculator, FeatureVector
 from src.utils.config import get_config
+from src.utils.draw import draw_overlay, encode_jpeg
 from src.utils.keypoints import KeypointFrame
 from src.utils.logger import get_logger
 
@@ -121,6 +123,7 @@ class FallRiskMonitor:
         inference_interval = self.config.inference.inference_interval_ms / 1000
         person_id = self.person_id
         device_id = self.device_id
+        _last_broadcast = 0.0  # 帧广播节流
 
         try:
             baseline = self.baseline_manager.load_baseline(person_id)
@@ -146,6 +149,24 @@ class FallRiskMonitor:
                     # 阶段2: 关键点提取
                     self.status.frames_processed += 1
                     kp_frame = self.keypoint_extractor.extract(video_frame)
+
+                    # 视频帧广播 (10 FPS 节流)
+                    now = time.time()
+                    if video_manager.has_clients and now - _last_broadcast >= 0.1:
+                        _last_broadcast = now
+                        try:
+                            risk_level = self.status.current_risk_level.value
+                            overlay = draw_overlay(
+                                video_frame.frame, kp_frame,
+                                risk_level=risk_level,
+                                baseline_ready=self.status.baseline_ready,
+                                frames_processed=self.status.frames_processed,
+                            )
+                            jpeg = encode_jpeg(overlay)
+                            video_manager.broadcast_frame(jpeg)
+                        except Exception:
+                            pass  # 帧编码/推送失败不影响主流程
+
                     if kp_frame is None:
                         continue
 

@@ -29,6 +29,8 @@ export default function App() {
     return saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   })
   const wsRef = useRef(null)
+  const videoWsRef = useRef(null)
+  const videoImgRef = useRef(null)
   const gaugeRef = useRef(null)
   const trendRef = useRef(null)
 
@@ -87,6 +89,32 @@ export default function App() {
     }
 
     return () => ws.close()
+  }, [])
+
+  // ── 视频 WebSocket ──
+  useEffect(() => {
+    let stopped = false
+    const connectVideo = () => {
+      if (stopped) return
+      const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/video`
+      const ws = new WebSocket(wsUrl)
+      videoWsRef.current = ws
+
+      ws.onmessage = (event) => {
+        if (videoImgRef.current && event.data instanceof Blob) {
+          const url = URL.createObjectURL(event.data)
+          const prev = videoImgRef.current.src
+          videoImgRef.current.src = url
+          if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+        }
+      }
+
+      ws.onclose = () => {
+        if (!stopped) setTimeout(connectVideo, 3000)
+      }
+    }
+    connectVideo()
+    return () => { stopped = true; videoWsRef.current?.close() }
   }, [])
 
   // ── 定时刷新 ──
@@ -268,6 +296,30 @@ export default function App() {
           <button className="btn btn-secondary" onClick={resetBaseline}>
             ↻ 重置基线
           </button>
+        </div>
+      </div>
+
+      {/* ── 视频画面 ── */}
+      <div className="video-panel">
+        <div className="video-header">
+          <h3>实时画面</h3>
+          <span className={`video-badge ${status.is_running ? 'live' : 'idle'}`}>
+            <span className="dot" />
+            {status.is_running ? '监控中' : '待启动'}
+          </span>
+        </div>
+        <div className="video-container">
+          <img
+            ref={videoImgRef}
+            alt="实时监控画面"
+            className="video-frame"
+          />
+          {!status.is_running && (
+            <div className="video-placeholder">
+              <span className="placeholder-icon">📹</span>
+              <span>点击「启动监控」开始查看实时画面</span>
+            </div>
+          )}
         </div>
       </div>
 
