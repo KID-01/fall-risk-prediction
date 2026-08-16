@@ -139,6 +139,23 @@ alert:
     after_seconds: 15                    # 预警后保存15秒
     format: "mp4"
 
+# ── 声音事件识别 (PANNs Cnn14) ──
+audio:
+  enabled: true
+  model_type: "Cnn14"                    # panns-inference 固定支持 Cnn14
+  checkpoint_path: "~/panns_data/Cnn14_mAP=0.431.pth"
+  device: "cpu"                          # cpu | cuda
+  sample_rate: 32000                     # PANNs 固定内部采样率
+  chunk_seconds: 10                      # 分析片段长度(秒, 预留给后续流式分帧)
+  top_k: 5                               # 全局 top_k 类别数
+  min_event_score: 0.05                  # 全局最低保留分数
+  vocal_distress:
+    threshold: 0.25
+    indices: [8, 10, 11, 14, 22, 23, 25, 38, 44]
+  impact:
+    threshold: 0.30
+    indices: [358, 359, 441, 443, 460, 466, 469, 470]
+
 # ── 模型参数 (FallRiskPredictor) ──
 model:
   d_model: 256                      # 时序编码器/融合模块的隐藏维度
