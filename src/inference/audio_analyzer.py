@@ -73,12 +73,18 @@ class AudioEvent:
 
 @dataclass
 class AudioAnalysisResult:
-    """一次音频分析的完整结果"""
+    """一次音频分析的完整结果
+
+    embedding (2048,) 与 clipwise (527,) 为模型原始输出,
+    供未来特征级融合 (MultiModalFusion audio 分支) 使用; 分析失败时为 None
+    """
 
     events: list[AudioEvent]
     top_labels: list[tuple[str, float]]
     duration_sec: float
     elapsed_ms: float
+    embedding: np.ndarray | None = None
+    clipwise: np.ndarray | None = None
 
 
 class AudioAnalyzer:
@@ -139,7 +145,7 @@ class AudioAnalyzer:
             wave = librosa.resample(wave, orig_sr=sample_rate, target_sr=self.sample_rate)
 
         self._ensure_model()
-        clipwise, _embedding = self._model.inference(
+        clipwise, embedding = self._model.inference(
             np.ascontiguousarray(wave[None, :], dtype=np.float32)
         )
         scores = clipwise[0]
@@ -154,6 +160,8 @@ class AudioAnalyzer:
             top_labels=top_labels,
             duration_sec=duration_sec,
             elapsed_ms=elapsed_ms,
+            embedding=embedding[0].copy(),
+            clipwise=scores.copy(),
         )
 
     def analyze_file(self, path: str | Path, timestamp: float = 0.0) -> AudioAnalysisResult:

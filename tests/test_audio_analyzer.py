@@ -306,6 +306,45 @@ class TestTimestampPropagation:
 
 
 # ============================================================
+# TestEmbeddingExposure — 暴露 embedding/clipwise 特征
+# ============================================================
+class TestEmbeddingExposure:
+    def _make_analyzer(self, **overrides) -> AudioAnalyzer:
+        analyzer = AudioAnalyzer(config=_make_cfg(**overrides))
+        analyzer._model = FakeModel()
+        return analyzer
+
+    def test_result_has_embedding_field(self):
+        """分析后 embedding 非 None, 形状 (2048,) 且等于模型输出"""
+        analyzer = self._make_analyzer()
+        analyzer._model.scores[0, 14] = 0.9
+        result = analyzer.analyze_waveform(np.zeros(32000, dtype=np.float32), 32000)
+        assert result.embedding is not None
+        assert result.embedding.shape == (2048,)
+        assert np.array_equal(result.embedding, np.zeros(2048, dtype=np.float32))
+
+    def test_result_has_clipwise_field(self):
+        """分析后 clipwise 非 None, 形状 (527,) 且等于模型打分"""
+        analyzer = self._make_analyzer()
+        analyzer._model.scores[0, 14] = 0.9
+        result = analyzer.analyze_waveform(np.zeros(32000, dtype=np.float32), 32000)
+        assert result.clipwise is not None
+        assert result.clipwise.shape == (527,)
+        assert result.clipwise[14] == pytest.approx(0.9)
+
+    def test_fields_default_none(self):
+        """直接构造结果对象 → embedding/clipwise 默认为 None"""
+        result = AudioAnalysisResult(
+            events=[],
+            top_labels=[],
+            duration_sec=0.0,
+            elapsed_ms=0.0,
+        )
+        assert result.embedding is None
+        assert result.clipwise is None
+
+
+# ============================================================
 # TestAudioAnalyzerIntegration — 需要真实 Cnn14 checkpoint
 # ============================================================
 class TestAudioAnalyzerIntegration:
