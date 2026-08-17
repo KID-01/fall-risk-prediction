@@ -4,9 +4,10 @@
 """
 from __future__ import annotations
 
+import inspect
 import re
 from collections.abc import Sequence
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
 from unittest.mock import patch
 
@@ -342,6 +343,33 @@ class TestEmbeddingExposure:
         )
         assert result.embedding is None
         assert result.clipwise is None
+
+
+# ============================================================
+# TestPublicContract — 公开接口契约锁定
+# ============================================================
+class TestPublicContract:
+    def test_analyze_waveform_signature(self):
+        """analyze_waveform 签名含 timestamp 参数, 默认 0.0"""
+        sig = inspect.signature(AudioAnalyzer.analyze_waveform)
+        params = sig.parameters
+        assert "timestamp" in params
+        assert params["timestamp"].default == 0.0
+
+    def test_analyze_file_signature(self):
+        """analyze_file 签名含 timestamp 参数, 默认 0.0"""
+        sig = inspect.signature(AudioAnalyzer.analyze_file)
+        params = sig.parameters
+        assert "timestamp" in params
+        assert params["timestamp"].default == 0.0
+
+    def test_result_has_embedding_clipwise_fields(self):
+        """AudioAnalysisResult 含 embedding/clipwise 字段, 默认 None"""
+        field_map = {f.name: f for f in fields(AudioAnalysisResult)}
+        assert "embedding" in field_map
+        assert "clipwise" in field_map
+        assert field_map["embedding"].default is None
+        assert field_map["clipwise"].default is None
 
 
 # ============================================================
