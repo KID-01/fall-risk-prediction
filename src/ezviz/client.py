@@ -309,6 +309,57 @@ class EzvizClient:
         """获取 RTSP 流地址（适合 OpenCV 拉流）"""
         return await self.get_live_stream(device_serial, channel_no, protocol=4)
 
+    async def set_video_encode(
+        self,
+        device_serial: str,
+        encode_type: str = "H264",
+        stream_type: int = 1,
+        channel_no: int = 1,
+    ) -> bool:
+        """
+        切换设备视频编码格式
+
+        Args:
+            device_serial: 设备序列号
+            encode_type: 编码格式 H264 / H265
+            stream_type: 码流类型 1=主码流 2=子码流
+            channel_no: 通道号
+
+        Returns:
+            是否成功
+        """
+        token = await self.get_token()
+        client = await self._get_client()
+
+        url = f"{BASE_URL}/api/v3/device/video/encodeType"
+        headers = {
+            "accessToken": token,
+            "deviceSerial": device_serial,
+            "localIndex": str(channel_no),
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        data = {
+            "encodeType": encode_type,
+            "streamType": str(stream_type),
+        }
+
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                resp = await client.put(url, headers=headers, data=data)
+                resp.raise_for_status()
+                result = resp.json()
+                code = result.get("meta", {}).get("code", -1)
+                if code == 200:
+                    logger.info(f"视频编码切换成功: {encode_type}")
+                    return True
+                logger.error(f"编码切换失败: {result.get('meta', {}).get('message', '未知错误')}")
+                return False
+            except httpx.HTTPError as e:
+                logger.warning(f"编码切换请求失败 (第 {attempt}/{self.max_retries} 次): {e}")
+                if attempt < self.max_retries:
+                    await asyncio.sleep(self.retry_delay * (2 ** (attempt - 1)))
+        return False
+
     # ── 云台控制 (PTZ) ─────────────────────────────────
 
     # 云台控制方向常量
