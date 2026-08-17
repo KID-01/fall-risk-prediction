@@ -1,6 +1,21 @@
 """
 音频分析模块 — 基于 PANNs Cnn14 (panns-inference) 的跌倒相关声音事件识别
 覆盖: 声音事件分类(人声呼救/撞击声) / 音频重采样 / 多标签打分 / 阈值筛选
+
+公开接口契约:
+- AudioAnalyzer(config=None): 分析器, 构造时读取 config.audio, 模型懒加载
+- analyze_waveform(waveform, sample_rate, timestamp=0.0) -> AudioAnalysisResult
+- analyze_file(path, timestamp=0.0) -> AudioAnalysisResult
+- AudioAnalysisResult{events, top_labels, duration_sec, elapsed_ms, embedding, clipwise}
+- AudioEvent{category, label, class_index, score, timestamp}
+
+未来流式接入方式 (供 monitor 集成时参考):
+- 采集层产出固定时长音频块 (config.audio.chunk_seconds, 默认 10s),
+  以 (waveform, sample_rate, 块起始时间) 三元组调用
+  analyze_waveform(waveform, sample_rate, timestamp=chunk_start_time)
+- 事件 timestamp 与视频帧时间轴对齐, 可送入 AlertEngine 融合判断
+- embedding(2048,) 与 clipwise(527,) 供未来特征级融合 (MultiModalFusion audio 分支)
+- 线程安全: 模型懒加载双检锁; 若多线程并发调用 analyze_*, 需外部串行化
 """
 from __future__ import annotations
 
