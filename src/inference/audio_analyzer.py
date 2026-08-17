@@ -110,8 +110,16 @@ class AudioAnalyzer:
         """音频分析是否启用"""
         return self._enabled
 
-    def analyze_waveform(self, waveform: np.ndarray, sample_rate: int) -> AudioAnalysisResult:
-        """分析一段波形, 返回声音事件与 top-k 标签"""
+    def analyze_waveform(
+        self, waveform: np.ndarray, sample_rate: int, timestamp: float = 0.0
+    ) -> AudioAnalysisResult:
+        """分析一段波形, 返回声音事件与 top-k 标签
+
+        Args:
+            waveform: 波形数据 (支持 int16/float32, 单声道或双声道)
+            sample_rate: 输入采样率
+            timestamp: 该段音频的起始时间戳(秒), 事件将携带此时间戳
+        """
         if not self._enabled:
             raise RuntimeError("音频分析未启用 (audio.enabled=false)")
 
@@ -136,7 +144,7 @@ class AudioAnalyzer:
         )
         scores = clipwise[0]
 
-        events = self._build_events(scores)
+        events = self._build_events(scores, timestamp)
         top_labels = self._build_top_labels(scores)
         elapsed_ms = (time.perf_counter() - start) * 1000
 
@@ -148,13 +156,18 @@ class AudioAnalyzer:
             elapsed_ms=elapsed_ms,
         )
 
-    def analyze_file(self, path: str | Path) -> AudioAnalysisResult:
-        """分析音频文件 (wav/flac/ogg 等 soundfile 支持的格式)"""
-        waveform, sample_rate = sf.read(str(path), dtype="float32", always_2d=False)
-        return self.analyze_waveform(waveform, int(sample_rate))
+    def analyze_file(self, path: str | Path, timestamp: float = 0.0) -> AudioAnalysisResult:
+        """分析音频文件 (wav/flac/ogg 等 soundfile 支持的格式)
 
-    def _build_events(self, scores: np.ndarray) -> list[AudioEvent]:
-        """按类别阈值筛选声音事件"""
+        Args:
+            path: 音频文件路径
+            timestamp: 该段音频的起始时间戳(秒), 事件将携带此时间戳
+        """
+        waveform, sample_rate = sf.read(str(path), dtype="float32", always_2d=False)
+        return self.analyze_waveform(waveform, int(sample_rate), timestamp=timestamp)
+
+    def _build_events(self, scores: np.ndarray, timestamp: float = 0.0) -> list[AudioEvent]:
+        """按类别阈值筛选声音事件, 仅对已知类别产出事件"""
         events: list[AudioEvent] = []
         for idx in range(len(scores)):
             score = float(scores[idx])
@@ -168,7 +181,7 @@ class AudioAnalyzer:
                             label=VOCAL_DISTRESS_LABELS[idx],
                             class_index=idx,
                             score=score,
-                            timestamp=0.0,
+                            timestamp=timestamp,
                         )
                     )
             elif idx in IMPACT_LABELS:
@@ -179,7 +192,7 @@ class AudioAnalyzer:
                             label=IMPACT_LABELS[idx],
                             class_index=idx,
                             score=score,
-                            timestamp=0.0,
+                            timestamp=timestamp,
                         )
                     )
         return events

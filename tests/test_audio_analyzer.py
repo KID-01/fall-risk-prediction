@@ -264,6 +264,48 @@ class TestAudioAnalyzerMapping:
 
 
 # ============================================================
+# TestTimestampPropagation — timestamp 参数传递
+# ============================================================
+class TestTimestampPropagation:
+    def _make_analyzer(self, **overrides) -> AudioAnalyzer:
+        analyzer = AudioAnalyzer(config=_make_cfg(**overrides))
+        analyzer._model = FakeModel()
+        return analyzer
+
+    def test_default_timestamp_zero(self):
+        """默认 timestamp=0.0 → 事件 timestamp 为 0.0"""
+        analyzer = self._make_analyzer()
+        analyzer._model.scores[0, 14] = 0.9
+        result = analyzer.analyze_waveform(np.zeros(32000, dtype=np.float32), 32000)
+        assert len(result.events) == 1
+        assert result.events[0].timestamp == 0.0
+
+    def test_timestamp_passed_to_events(self):
+        """analyze_waveform(timestamp=12.5) → 事件 timestamp 为 12.5"""
+        analyzer = self._make_analyzer()
+        analyzer._model.scores[0, 14] = 0.9
+        result = analyzer.analyze_waveform(
+            np.zeros(32000, dtype=np.float32), 32000, timestamp=12.5
+        )
+        assert len(result.events) == 1
+        assert result.events[0].timestamp == 12.5
+
+    def test_analyze_file_timestamp(self, tmp_path):
+        """analyze_file(path, timestamp=7.0) → 事件 timestamp 为 7.0"""
+        import soundfile as sf
+
+        sr = 32000
+        wave = np.zeros(sr * 2, dtype=np.float32)
+        path = tmp_path / "tone.wav"
+        sf.write(str(path), wave, sr)
+        analyzer = self._make_analyzer()
+        analyzer._model.scores[0, 14] = 0.9
+        result = analyzer.analyze_file(str(path), timestamp=7.0)
+        assert len(result.events) == 1
+        assert result.events[0].timestamp == 7.0
+
+
+# ============================================================
 # TestAudioAnalyzerIntegration — 需要真实 Cnn14 checkpoint
 # ============================================================
 class TestAudioAnalyzerIntegration:
