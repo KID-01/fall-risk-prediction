@@ -72,6 +72,7 @@ class EzvizClient:
         self._token: str | None = None
         self._token_expire_time: float = 0.0  # 过期时间戳
         self._client: httpx.AsyncClient | None = None
+        self._token_lock = asyncio.Lock()
 
     # ── HTTP 客户端管理 ─────────────────────────────────
 
@@ -104,49 +105,60 @@ class EzvizClient:
         Returns:
             accessToken 字符串
         """
-        now = time.time()
-        # 如果 token 还有效（提前 5 分钟刷新），直接返回
-        if self._token is not None and now < self._token_expire_time - TOKEN_REFRESH_AHEAD:
-            return self._token
-
-        # 请求新 token
-        logger.info("正在获取萤石 AccessToken...")
-        client = await self._get_client()
-
-        for attempt in range(1, self.max_retries + 1):
-            try:
-                resp = await client.post(
-                    API_TOKEN,
-                    data={
-                        "appKey": self.app_key,
-                        "appSecret": self.app_secret,
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
-
-                if data.get("code") != "200":
-                    error_msg = data.get("msg", "未知错误")
-                    logger.error(f"获取 Token 失败: {error_msg}")
-                    raise RuntimeError(f"萤石 API 返回错误: {error_msg}")
-
-                self._token = data["data"]["accessToken"]
-                expire_seconds = int(data["data"].get("expireTime", 604800))
-                self._token_expire_time = now + expire_seconds
-
-                logger.info(f"Token 获取成功，有效期 {expire_seconds // 86400} 天")
+        async with self._token_lock:
+            now = time.time()
+            # 如果 token 还有效（提前 5 分钟刷新），直接返回
+            if self._token is not None and now < self._token_expire_time - TOKEN_REFRESH_AHEAD:
                 return self._token
 
-            except httpx.HTTPError as e:
-                logger.warning(f"Token 请求失败 (第 {attempt}/{self.max_retries} 次): {e}")
-                if attempt < self.max_retries:
-                    wait = self.retry_delay * (2 ** (attempt - 1))  # 指数退避
-                    await asyncio.sleep(wait)
-                else:
-                    raise RuntimeError(f"Token 请求失败，已重试 {self.max_retries} 次") from e
+            # 请求新 token
+            logger.info("正在获取萤石 AccessToken...")
+            client = await self._get_client()
 
-        # 理论上不会走到这里
-        raise RuntimeError("Token 获取失败")
+            for attempt in range(1, self.max_retries + 1):
+                try:
+                    resp = await client.post(
+                        API_TOKEN,
+                        data={
+                            "appKey": self.app_key,
+                            "appSecret": self.app_secret,
+                        },
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                    if data.get("code") != "200":
+                        error_msg = data.get("msg", "未知错误")
+                        logger.error(f"获取 Token 失败: {error_msg}")
+                        raise RuntimeError(f"萤石 API 返回错误: {error_msg}")
+
+                    self._token = data["data"]["accessToken"]
+                    expire_raw = int(data["data"].get("expireTime", 604800))
+                    self._token_expire_time = self._normalize_expire_time(expire_raw, time.time())
+                    remaining_days = max(0, int((self._token_expire_time - time.time()) / 86400))
+
+                    logger.info(f"Token 获取成功，有效期约 {remaining_days} 天")
+                    return self._token
+
+                except httpx.HTTPError as e:
+                    logger.warning(f"Token 请求失败 (第 {attempt}/{self.max_retries} 次): {e}")
+                    if attempt < self.max_retries:
+                        wait = self.retry_delay * (2 ** (attempt - 1))  # 指数退避
+                        await asyncio.sleep(wait)
+                    else:
+                        raise RuntimeError(f"Token 请求失败，已重试 {self.max_retries} 次") from e
+
+            # 理论上不会走到这里
+            raise RuntimeError("Token 获取失败")
+
+    @staticmethod
+    def _normalize_expire_time(raw_value: int, now: float) -> float:
+        """兼容萤石返回的毫秒时间戳、秒时间戳和持续秒数。"""
+        if raw_value >= 10**12:
+            return raw_value / 1000
+        if raw_value > now + 86400:
+            return float(raw_value)
+        return now + max(0, raw_value)
 
     async def ensure_token(self) -> str:
         """确保 token 可用（同 get_token，语义更明确的别名）"""
@@ -288,7 +300,7 @@ class EzvizClient:
                     url = raw[0].get("url", "") if isinstance(raw[0], dict) else str(raw[0])
                 else:
                     url = str(raw) if raw else ""
-                logger.info(f"获取到 {proto_name} 直播地址: {url[:50]}...")
+                logger.info(f"已获取 {proto_name} 直播地址")
                 return url
 
             except httpx.HTTPError as e:
@@ -308,6 +320,18 @@ class EzvizClient:
     async def get_rtsp_url(self, device_serial: str, channel_no: int = 1) -> str | None:
         """获取 RTSP 流地址（适合 OpenCV 拉流）"""
         return await self.get_live_stream(device_serial, channel_no, protocol=4)
+
+    async def get_analysis_stream(self, device_serial: str, channel_no: int = 1) -> str | None:
+        """获取可供 OpenCV 分析的 RTMP/RTSP 地址。
+
+        萤石不同接口版本对 protocol 编号的返回协议存在差异，因此按实际
+        URL scheme 判断，避免把 HLS/FLV 地址交给 OpenCV。
+        """
+        for protocol in (3, 2, 4):
+            url = await self.get_live_stream(device_serial, channel_no, protocol=protocol)
+            if url and url.lower().startswith(("rtmp://", "rtsp://")):
+                return url
+        return None
 
     async def set_video_encode(
         self,

@@ -5,6 +5,7 @@
   "description": "跌倒风险预测系统 — 家属端实时风险看板",
   "dependencies": {
     "echarts": "^5.5.0",
+    "ezuikit-js": "9.0.15",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
