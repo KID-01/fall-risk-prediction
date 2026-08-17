@@ -254,15 +254,13 @@ class TestAudioAnalyzerMapping:
         assert received["checkpoint_path"] == str(checkpoint)
         assert analyzer._model is not None
 
-    def test_labels_fallback_for_unknown_index(self):
-        """未知索引高分 → 事件 label 回退为 str(class_index)"""
+    def test_unknown_high_score_no_event(self):
+        """未知 AudioSet 类别高分 → 不产出事件, 仅保留于 top_labels"""
         analyzer = self._make_analyzer()
         analyzer._model.scores[0, 200] = 0.9
         result = analyzer.analyze_waveform(np.zeros(32000, dtype=np.float32), 32000)
-        assert len(result.events) == 1
-        event = result.events[0]
-        assert event.class_index == 200
-        assert event.label == "200"
+        assert result.events == []
+        assert any(label == "200" for label, _ in result.top_labels)
 
 
 # ============================================================

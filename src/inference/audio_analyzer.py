@@ -182,16 +182,6 @@ class AudioAnalyzer:
                             timestamp=0.0,
                         )
                     )
-            else:
-                events.append(
-                    AudioEvent(
-                        category=SoundCategory.IMPACT,
-                        label=str(idx),
-                        class_index=idx,
-                        score=score,
-                        timestamp=0.0,
-                    )
-                )
         return events
 
     def _build_top_labels(self, scores: np.ndarray) -> list[tuple[str, float]]:
