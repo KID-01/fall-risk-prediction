@@ -15,7 +15,9 @@ from datetime import datetime
 from enum import Enum
 
 import numpy as np
+from omegaconf import OmegaConf
 
+from src.inference.audio_analyzer import AudioEvent, SoundCategory
 from src.inference.deviation import DeviationLevel, DeviationResult
 from src.utils.config import get_config
 
@@ -68,17 +70,20 @@ AlertAction = Callable[[AlertEvent], None]
 class AlertEngine:
     """分级预警引擎"""
 
-    def __init__(self):
-        config = get_config()
-        alert_cfg = config.alert
+    def __init__(self, config: OmegaConf | None = None):
+        cfg = config if config is not None else get_config()
+        alert_cfg = cfg.alert
         self.short_term_freq_threshold = alert_cfg.short_term_freq_threshold
         # 短期检测确认后，极端偏离应直接进入高危级，而不是等待频次计数。
-        self.severe_deviation_distance = config.deviation.short_term.threshold * 2
+        self.severe_deviation_distance = cfg.deviation.short_term.threshold * 2
         self.severe_deviation_z = 6.0
         self.inactivity_threshold_minutes = alert_cfg.inactivity_threshold_minutes
         self.video_clip_enabled = alert_cfg.video_clip.enabled
         self.video_clip_before = alert_cfg.video_clip.before_seconds
         self.video_clip_after = alert_cfg.video_clip.after_seconds
+        # 音频触发预警阈值
+        self.impact_critical_threshold = float(alert_cfg.audio.impact_critical_threshold)
+        self.vocal_attention_threshold = float(alert_cfg.audio.vocal_attention_threshold)
 
         self._short_term_count_hourly = 0      # 每小时短期偏离计数
         self._last_reset_time = 0.0            # 上次计数重置时间
@@ -107,6 +112,7 @@ class AlertEngine:
         deviation: DeviationResult,
         timestamp: float,
         has_activity: bool = True,
+        audio_events: list[AudioEvent] | None = None,
     ) -> AlertEvent:
         """
         评估风险等级并生成预警事件
@@ -115,6 +121,7 @@ class AlertEngine:
             deviation: 偏离检测结果
             timestamp: 当前时间戳
             has_activity: 当前是否有活动(用于无活动检测)
+            audio_events: 音频分析检测到的事件列表 (可选)
         Returns:
             AlertEvent
         """
@@ -162,6 +169,20 @@ class AlertEngine:
         else:
             level = RiskLevel.LOW
             message = "所有特征正常"
+
+        # 音频事件升级逻辑
+        if audio_events:
+            for event in audio_events:
+                if event.category == SoundCategory.IMPACT and event.score >= self.impact_critical_threshold:
+                    # 撞击声达到阈值 → 直接升级为 CRITICAL
+                    if level.priority < RiskLevel.CRITICAL.priority:
+                        level = RiskLevel.CRITICAL
+                        message += f" | 撞击声触发高危: {event.label} ({event.score:.2f})"
+                elif event.category == SoundCategory.VOCAL_DISTRESS and event.score >= self.vocal_attention_threshold:
+                    # 人声呼救达到阈值 → 至少升级为 ATTENTION
+                    if level.priority < RiskLevel.ATTENTION.priority:
+                        level = RiskLevel.ATTENTION
+                    message += f" | 人声呼救: {event.label} ({event.score:.2f})"
 
         event = AlertEvent(
             level=level,

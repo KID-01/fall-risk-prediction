@@ -371,6 +371,13 @@ class TestPublicContract:
         assert field_map["embedding"].default is None
         assert field_map["clipwise"].default is None
 
+    def test_model_loaded_reflects_state(self):
+        """model_loaded 属性反映内部模型加载状态: 初始 False, 注入后 True"""
+        analyzer = AudioAnalyzer(config=_make_cfg())
+        assert analyzer.model_loaded is False
+        analyzer._model = FakeModel()
+        assert analyzer.model_loaded is True
+
 
 # ============================================================
 # TestAudioAnalyzerIntegration — 需要真实 Cnn14 checkpoint
