@@ -306,7 +306,7 @@ video:
 
 ```yaml
 human_detection:
-  model: "yolov8n"              # 轻量模型，首次自动下载（~6MB）
+  model: "yolo26n"              # COCO预训练检测模型
   confidence_threshold: 0.5     # 检测置信度阈值
   device: "cpu"                 # cpu 或 cuda
 ```

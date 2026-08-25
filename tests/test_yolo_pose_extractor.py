@@ -217,7 +217,7 @@ class TestYoloPoseExtractor:
 
     def test_ensure_model_downloads_missing_model(self, tmp_path):
         """模型缺失时自动下载到指定路径 (mock 下载与加载, 无网络)"""
-        model_path = tmp_path / "yolov8n-pose.pt"
+        model_path = tmp_path / "yolo26n-pose.pt"
         extractor = YoloPoseExtractor(model_path=str(model_path))
         with (
             patch("ultralytics.utils.downloads.attempt_download_asset") as mock_download,

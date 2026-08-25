@@ -93,15 +93,6 @@ npm-debug.log*
 # Reproducible integration-test artifacts. Keep all other weights/data ignored.
 !/checkpoints/
 /checkpoints/*
-!/checkpoints/test_best.pt
-!/checkpoints/yolov8n.pt
-!/checkpoints/yolov8n-pose.pt
-
-!/data/
-/data/*
-!/data/keypoints/
-/data/keypoints/*
-!/data/keypoints/fixture_*.npy
-!/data/labels/
-/data/labels/*
-!/data/labels/fixture_labels.json
+!/checkpoints/yolo26n.pt
+!/checkpoints/yolo26n-pose.pt
+!/checkpoints/README.md

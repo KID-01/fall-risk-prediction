@@ -200,7 +200,7 @@ if best:
 ```
 
 **配置项**（`configs/base.yaml` → `human_detection`）：
-- `model: "yolov8n"` — 模型名称
+- `model: "yolo26n"` — 当前 COCO 预训练检测模型
 - `confidence_threshold: 0.5` — 置信度阈值
 - `device: "cpu"` — 推理设备
 
@@ -542,7 +542,7 @@ Get-ChildItem -Recurse -Filter "*.pyc" | Remove-Item -Force
 | 区块 | 说明 | 关键参数 |
 |------|------|---------|
 | `video` | 视频采集 | `sample_fps: 10`（采样帧率） |
-| `human_detection` | 人体检测 | `model: yolov8n`, `confidence_threshold: 0.5` |
+| `human_detection` | 人体检测 | `model: yolo26n`, `confidence_threshold: 0.5` |
 | `pose_estimation` | 姿态估计 | `model_complexity: 0`（Lite）, `confidence_threshold: 0.5` |
 | `features` | 四大特征 | 各特征的计算参数（FFT频率范围、运动阈值等） |
 | `baseline` | 个体化基线 | `collection_days: 7`, `min_samples: 100` |
