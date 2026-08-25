@@ -672,6 +672,16 @@ svg { display: inline-block; vertical-align: middle; }
   color: var(--fr-state-success);
   background: var(--fr-success-soft);
 }
+
+.pipeline-audio-source-tag {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+}
+
 .live-dot {
   width: 8px; height: 8px;
   background: var(--fr-state-success);

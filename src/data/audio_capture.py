@@ -149,7 +149,7 @@ class AudioCapture:
             if src == "mic":
                 return self._open_mic()
             elif src.startswith("rtsp://") or src.startswith("rtmp://"):
-                return self._open_rtsp()
+                return self._open_network_stream()
             elif src == "auto" or src == "off":
                 log.info(f"音频源 '{src}' 暂不直接打开, 由 monitor.py 决定")
                 self._is_open = True  # 标记为"已处理", 实际采集由 monitor 决定
@@ -279,23 +279,29 @@ class AudioCapture:
             log.error(f"启动麦克风失败: {e}")
             return False
 
-    def _open_rtsp(self) -> bool:
-        """打开 RTSP 音频流 (通过 ffmpeg 解码为 PCM s16le stdout)"""
+    def _open_network_stream(self) -> bool:
+        """打开 RTSP/RTMP 网络音频流 (通过 ffmpeg 解码为 PCM s16le stdout)"""
         if not which(self.ffmpeg_path):
             log.error(f"ffmpeg 不存在: {self.ffmpeg_path}")
             return False
 
+        is_rtmp = self.source.lower().startswith("rtmp://")
+
+        # RTSP 用 tcp 传输避免 UDP 丢包; RTMP 不需要此参数
+        input_opts = ["-nostdin"]
+        if not is_rtmp:
+            input_opts.extend(["-rtsp_transport", "tcp"])
+
         cmd = [
             self.ffmpeg_path,
-            "-nostdin",
-            "-rtsp_transport", "tcp",
+            *input_opts,
             "-i", self.source,
             "-vn",                      # 不要视频
             "-acodec", "pcm_s16le",     # 输出 16-bit PCM
             "-ar", str(self.sample_rate),  # 目标采样率
             "-ac", "1",                 # 单声道
             "-f", "s16le",              # 原始 PCM 格式
-            "-loglevel", "error",       # 只输出错误
+            "-loglevel", "warning",     # 输出警告+错误, 便于调试
             "-",                        # 输出到 stdout
         ]
 
@@ -312,13 +318,16 @@ class AudioCapture:
                 bufsize=1024 * 1024,
                 creationflags=creationflags,
             )
-            # 等待 ffmpeg 启动
-            time.sleep(0.5)
+            time.sleep(1.0)
             if self._ffmpeg_proc.poll() is not None:
-                log.error(f"ffmpeg 进程异常退出: {self._ffmpeg_proc.returncode}")
+                log.error(
+                    f"ffmpeg 进程异常退出 (code={self._ffmpeg_proc.returncode}): "
+                    f"source={self.source[:80]}"
+                )
                 return False
             self._is_open = True
-            log.info(f"RTSP 音频流已连接: {self.source[:60]}...")
+            protocol = "RTMP" if is_rtmp else "RTSP"
+            log.info(f"{protocol} 音频流已连接: {self.source[:60]}...")
             return True
         except Exception as e:
             log.error(f"启动 ffmpeg 失败: {e}")

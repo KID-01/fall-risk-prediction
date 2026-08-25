@@ -85,18 +85,18 @@ class TemporalEncoder(nn.Module):
             keypoints: (B, T, 33, 3) 骨骼关键点时序序列
         Returns:
             seq_features: (B, T, 256) 时序特征
-            global_feat: (b, 256) 全局特征 (CLS token)
+            global_feat: (B, 256) 全局特征 (CLS token)
         """
-        b, t, k, c = keypoints.shape
+        B, T, K, C = keypoints.shape
 
-        # 展平关键点: (b, t, 33, 3) → (b, t, 99)
-        x = keypoints.reshape(b, t, k * c)
+        # 展平关键点: (B, T, 33, 3) → (B, T, 99)
+        x = keypoints.reshape(B, T, K * C)
 
         # 线性投影
         x = self.input_proj(x)  # (B, T, d_model)
 
         # 添加CLS token
-        cls = self.cls_token.expand(b, -1, -1)  # (B, 1, d_model)
+        cls = self.cls_token.expand(B, -1, -1)  # (B, 1, d_model)
         x = torch.cat([cls, x], dim=1)           # (B, T+1, d_model)
 
         # 位置编码

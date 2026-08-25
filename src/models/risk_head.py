@@ -30,8 +30,8 @@ class OrdinalLoss(nn.Module):
             targets: (B,) 等级标签 0-3
         """
         # 将等级标签转为序数编码
-        b = targets.size(0)
-        ordinal_targets = torch.zeros(b, self.num_classes - 1, device=targets.device)
+        B = targets.size(0)
+        ordinal_targets = torch.zeros(B, self.num_classes - 1, device=targets.device)
         for k in range(self.num_classes - 1):
             ordinal_targets[:, k] = (targets > k).float()
 

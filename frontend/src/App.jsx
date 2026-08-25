@@ -107,6 +107,7 @@ export default function App() {
   const [controlError, setControlError] = useState('')
   const [videoTab, setVideoTab] = useState('analysis')
   const [playerConfig, setPlayerConfig] = useState(null)
+  const [rawPlayerLoaded, setRawPlayerLoaded] = useState(false)
   const [playerState, setPlayerState] = useState('idle')
   const [playerError, setPlayerError] = useState('')
   const [theme, setTheme] = useState(() => {
@@ -383,6 +384,7 @@ export default function App() {
             device_id: selectedDeviceId,
             channel_no: Number(channelNo),
             person_id: personId,
+            audio_source: audioSource,
           }),
         })
       } else {
@@ -403,7 +405,7 @@ export default function App() {
       }
       if (sourceMode === 'ezviz') setPlayerConfig(await response.json())
       else setPlayerConfig(null)
-      setVideoTab('analysis')
+      if (videoTab !== 'analysis') setVideoTab('analysis')
       fetchStatus()
     } catch (_) {
       setControlError('无法连接后端服务，请确认 FastAPI 已启动')
@@ -417,6 +419,7 @@ export default function App() {
         return
       }
       setPlayerConfig(null)
+      setRawPlayerLoaded(false)
       setPlayerError('')
       setPlayerState('idle')
       setVideoTab('analysis')
@@ -440,6 +443,7 @@ export default function App() {
         return
       }
       setPlayerConfig(await response.json())
+      setRawPlayerLoaded(true)
     } catch (_) {
       setPlayerState('error')
       setPlayerError('无法连接后端服务，请确认 FastAPI 已启动')
@@ -620,7 +624,7 @@ export default function App() {
             </>
           ) : videoTab === 'raw' ? (
             <>
-              {playerConfig
+              {rawPlayerLoaded && playerConfig
                 ? <EzvizPlayer active={videoTab === 'raw'} config={playerConfig} setPlayerState={setPlayerState} setPlayerError={setPlayerError} />
                 : <div className="video-placeholder"><Video size={30} /><span>选择在线设备并启动监控后显示原始画面</span></div>}
               {playerState === 'error' && (

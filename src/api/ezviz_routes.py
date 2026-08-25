@@ -20,6 +20,7 @@ class EzvizPlayerRequest(BaseModel):
 
 class EzvizMonitorRequest(EzvizPlayerRequest):
     person_id: str = Field(default="default", min_length=1, max_length=128)
+    audio_source: str = Field(default="", max_length=256)
 
 
 def _device_id(serial: str) -> str:
@@ -149,11 +150,28 @@ async def start_monitor(
     if not analysis_url:
         raise HTTPException(status_code=502, detail="未获取到可供分析的 RTMP/RTSP 地址")
 
+    if body.audio_source == "off":
+        audio_source = "off"
+    elif body.audio_source == "mic":
+        audio_source = "mic"
+    elif body.audio_source in ("auto", ""):
+        audio_source = None
+        try:
+            rtsp_url = await client.get_rtsp_url(serial, body.channel_no)
+            if rtsp_url:
+                audio_source = rtsp_url
+        except Exception:
+            pass
+        if not audio_source:
+            audio_source = analysis_url
+    else:
+        audio_source = body.audio_source
+
     if not monitor.start(
         source=analysis_url,
         person_id=body.person_id,
         device_id=body.device_id,
-        audio_source=analysis_url,
+        audio_source=audio_source,
     ):
         raise HTTPException(status_code=500, detail="后端监控启动失败")
     response.headers["Cache-Control"] = "no-store"
