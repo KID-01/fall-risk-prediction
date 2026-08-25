@@ -131,6 +131,11 @@ class AudioAnalyzer:
         """音频分析是否启用"""
         return self._enabled
 
+    @property
+    def model_loaded(self) -> bool:
+        """PANNs 模型是否已加载 (懒加载, 首次分析时才加载)"""
+        return self._model is not None
+
     def analyze_waveform(
         self, waveform: np.ndarray, sample_rate: int, timestamp: float = 0.0
     ) -> AudioAnalysisResult:

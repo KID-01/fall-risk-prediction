@@ -1,6 +1,7 @@
 """
 跌倒风险监控服务 — 整合完整链路:
 视频拉流 → 人体检测 → 关键点提取 → 帧过滤 → 特征计算 → 基线对比 → 偏离检测 → 分级预警
+音频采集 → 声音事件识别 → 音频预警升级 (并行线程)
 """
 from __future__ import annotations
 
@@ -11,10 +12,12 @@ from dataclasses import dataclass, field
 from src.alerts.engine import AlertEngine, AlertEvent, RiskLevel
 from src.api.database import Database
 from src.api.websocket import video_manager
+from src.data.audio_capture import AudioCapture
 from src.data.frame_filter import FrameFilter
 from src.data.human_detector import HumanDetector
 from src.data.keypoint_extractor import create_keypoint_extractor
 from src.data.video_capture import VideoCapture
+from src.inference.audio_analyzer import AudioAnalysisResult, AudioAnalyzer, AudioEvent
 from src.inference.baseline import BaselineManager
 from src.inference.deviation import DeviationDetector, DeviationResult
 from src.inference.features import FeatureCalculator, FeatureVector
@@ -43,6 +46,13 @@ class MonitorStatus:
     baseline_ready: bool = False
     baseline_samples: int = 0
     recent_keypoints: list[KeypointFrame] = field(default_factory=list)
+    audio_enabled: bool = False
+    audio_source: str = ""
+    last_audio_result: AudioAnalysisResult | None = None
+    audio_chunks_processed: int = 0
+    audio_error: str | None = None
+    _pending_audio_events: list[AudioEvent] = field(default_factory=list)
+    _audio_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
 class FallRiskMonitor:
@@ -79,33 +89,64 @@ class FallRiskMonitor:
         self.deviation_detector = DeviationDetector()
         self.alert_engine = AlertEngine()
 
+        # 音频组件 (start() 时按 audio_source 决定是否启用)
+        self.audio_analyzer: AudioAnalyzer | None = None
+        self.audio_capture: AudioCapture | None = None
+        self._audio_thread: threading.Thread | None = None
+
         # 运行控制
         self._thread: threading.Thread | None = None
         self._stop_flag = threading.Event()
         self._keypoint_buffer: list[KeypointFrame] = []
         self._buffer_window = 30  # 特征计算窗口帧数
 
-    def start(self, source: str, person_id: str = "default", device_id: str = "default") -> bool:
+    def start(
+        self,
+        source: str,
+        person_id: str = "default",
+        device_id: str = "default",
+        audio_source: str | None = None,
+    ) -> bool:
         """启动监控"""
         if self.status.is_running:
             return False
 
-        # 每次运行都清理上一次视频的窗口和告警状态，避免跨视频污染结果。
         self._keypoint_buffer.clear()
         self.deviation_detector.reset()
         self.alert_engine.reset()
         self.person_id = person_id
         self.device_id = device_id
+
+        cfg_audio_source = self.config.get("audio", {}).get("source", "off")
+        effective_audio_source = audio_source if audio_source is not None else cfg_audio_source
+        audio_enabled = effective_audio_source not in ("off", "auto", "")
+
         self.status = MonitorStatus(
             is_running=True,
             person_id=person_id,
             device_id=device_id,
             source=source,
+            audio_enabled=audio_enabled,
+            audio_source=effective_audio_source if audio_enabled else "",
         )
         self._stop_flag.clear()
 
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+
+        if audio_enabled:
+            self.audio_analyzer = AudioAnalyzer()
+            self.audio_capture = AudioCapture(
+                source=effective_audio_source,
+                sample_rate=int(self.config.audio.sample_rate),
+                chunk_seconds=int(self.config.audio.chunk_seconds),
+                input_device=self.config.audio.get("input_device"),
+                ffmpeg_path=str(self.config.audio.get("ffmpeg_path", "")),
+                stop_event=self._stop_flag,
+            )
+            self._audio_thread = threading.Thread(target=self._run_audio, daemon=True)
+            self._audio_thread.start()
+
         return True
 
     def stop(self):
@@ -113,7 +154,13 @@ class FallRiskMonitor:
         self._stop_flag.set()
         if self._thread:
             self._thread.join(timeout=5)
+        if self._audio_thread:
+            self._audio_thread.join(timeout=5)
+            self._audio_thread = None
         self.status.is_running = False
+        if self.audio_capture:
+            self.audio_capture.close()
+            self.audio_capture = None
         if self.video_capture:
             self.video_capture.close()
             self.video_capture = None
@@ -123,7 +170,7 @@ class FallRiskMonitor:
         inference_interval = self.config.inference.inference_interval_ms / 1000
         person_id = self.person_id
         device_id = self.device_id
-        _last_broadcast = 0.0  # 帧广播节流
+        _last_broadcast = 0.0
 
         try:
             baseline = self.baseline_manager.load_baseline(person_id)
@@ -139,18 +186,15 @@ class FallRiskMonitor:
                     if self._stop_flag.is_set():
                         break
 
-                    # 阶段1: 人体检测 (yolo_pose 后端由姿态模型自带人体检测, 跳过此阶段)
                     if self.pose_backend != "yolo_pose":
                         detection = self.human_detector.detect_best(video_frame.frame)
                         if detection is None:
                             self.status.frames_processed += 1
                             continue
 
-                    # 阶段2: 关键点提取
                     self.status.frames_processed += 1
                     kp_frame = self.keypoint_extractor.extract(video_frame)
 
-                    # 视频帧广播 (10 FPS 节流)
                     now = time.time()
                     if video_manager.has_clients and now - _last_broadcast >= 0.1:
                         _last_broadcast = now
@@ -165,12 +209,11 @@ class FallRiskMonitor:
                             jpeg = encode_jpeg(overlay)
                             video_manager.broadcast_frame(jpeg)
                         except Exception:
-                            pass  # 帧编码/推送失败不影响主流程
+                            pass
 
                     if kp_frame is None:
                         continue
 
-                    # 阶段3: 帧质量过滤
                     self.frame_filter.filter(kp_frame)
 
                     if not kp_frame.is_valid:
@@ -179,37 +222,38 @@ class FallRiskMonitor:
                     self.status.frames_valid += 1
                     self._keypoint_buffer.append(kp_frame)
 
-                    # 保留最近N帧
                     if len(self._keypoint_buffer) > self._buffer_window:
                         self._keypoint_buffer = self._keypoint_buffer[-self._buffer_window:]
 
                     self.status.recent_keypoints = list(self._keypoint_buffer)
 
-                    # 阶段4: 特征计算 (积累足够帧后)
                     if len(self._keypoint_buffer) >= 10:
                         feature = self.feature_calculator.calculate(self._keypoint_buffer)
                         self.status.last_feature = feature
 
-                        # 阶段5: 只在基线未完成时采集，避免异常动作污染基线。
                         if not baseline.is_ready:
                             self.baseline_manager.add_sample(self.person_id, feature)
                             baseline = self.baseline_manager.compute_baseline(self.person_id)
                             self.status.baseline_ready = baseline.is_ready
                             self.status.baseline_samples = baseline.sample_count
 
-                        # 阶段6: 偏离检测
                         if baseline.is_ready:
                             deviation = self.deviation_detector.check(feature, baseline)
                             self.status.last_deviation = deviation
 
-                            # 阶段7: 预警评估
+                            # 阶段7: 从音频线程排空待处理事件
+                            with self.status._audio_lock:
+                                pending_events = list(self.status._pending_audio_events)
+                                self.status._pending_audio_events.clear()
+
                             alert = self.alert_engine.evaluate(
-                                deviation, feature.timestamp, has_activity=True
+                                deviation, feature.timestamp,
+                                has_activity=True,
+                                audio_events=pending_events or None,
                             )
                             self.status.last_alert = alert
                             self.status.current_risk_level = alert.level
 
-                            # 阶段8: 持久化
                             try:
                                 db = Database()
                                 db.insert_risk_record(
@@ -239,9 +283,37 @@ class FallRiskMonitor:
         except Exception as e:
             log.error(f"监控线程异常: {e}")
         finally:
-            # 本地文件读完或线程异常时都要发布停止状态，供 API/演示脚本收敛。
             self.status.is_running = False
             self.video_capture = None
+
+    def _run_audio(self):
+        """音频采集+分析循环(独立线程, 与视频并行)"""
+        if self.audio_capture is None or self.audio_analyzer is None:
+            return
+
+        try:
+            with self.audio_capture:
+                for chunk in self.audio_capture.chunks():
+                    if self._stop_flag.is_set():
+                        break
+
+                    try:
+                        result = self.audio_analyzer.analyze_waveform(
+                            chunk.waveform, chunk.sample_rate, chunk.timestamp
+                        )
+                        self.status.last_audio_result = result
+                        self.status.audio_chunks_processed += 1
+
+                        if result.events:
+                            with self.status._audio_lock:
+                                self.status._pending_audio_events.extend(result.events)
+
+                    except Exception as e:
+                        self.status.audio_error = str(e)
+                        log.error(f"音频分析失败: {e}")
+        except Exception as e:
+            self.status.audio_error = str(e)
+            log.error(f"音频采集线程异常: {e}")
 
     def get_status(self) -> dict:
         """获取监控状态"""
@@ -283,6 +355,31 @@ class FallRiskMonitor:
                     "timestamp": self.status.last_alert.timestamp,
                 }
                 if self.status.last_alert
+                else None
+            ),
+            "audio_enabled": self.status.audio_enabled,
+            "audio_source": self.status.audio_source,
+            "audio_chunks_processed": self.status.audio_chunks_processed,
+            "audio_error": self.status.audio_error,
+            "last_audio_result": (
+                {
+                    "events": [
+                        {
+                            "category": e.category.value,
+                            "label": e.label,
+                            "score": e.score,
+                            "timestamp": e.timestamp,
+                        }
+                        for e in self.status.last_audio_result.events
+                    ],
+                    "top_labels": [
+                        [label, score]
+                        for label, score in self.status.last_audio_result.top_labels
+                    ],
+                    "duration_sec": self.status.last_audio_result.duration_sec,
+                    "elapsed_ms": self.status.last_audio_result.elapsed_ms,
+                }
+                if self.status.last_audio_result
                 else None
             ),
         }

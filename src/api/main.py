@@ -18,6 +18,9 @@ API 路由 (RESTful + WebSocket):
   GET  /api/v1/alerts                 告警历史(筛选+分页)
   POST /api/v1/alerts/{id}/acknowledge 确认告警
 
+  GET  /api/v1/audio/status           音频分析配置与模型状态
+  POST /api/v1/audio/analyze          上传音频进行声音事件识别
+
   GET  /api/v1/stats                  统计面板数据
 
   WS   /ws/alerts                     WebSocket 实时告警推送
@@ -31,6 +34,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from omegaconf import OmegaConf
 
+from src.api.audio_routes import audio_router
 from src.api.ezviz_routes import ezviz_router
 from src.api.routes import alerts_router, monitor_router, stats_router
 from src.api.websocket import video_websocket_endpoint, websocket_endpoint
@@ -82,6 +86,7 @@ app.add_middleware(
 # ── 注册路由 ──
 app.include_router(monitor_router)
 app.include_router(ezviz_router)
+app.include_router(audio_router)
 app.include_router(alerts_router)
 app.include_router(stats_router)
 

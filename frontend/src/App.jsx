@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import * as echarts from 'echarts'
+import AudioMonitor from './AudioMonitor'
 
 const API_BASE = '/api/v1'
 const LEVEL_LABELS = { low: '低风险', attention: '关注级', warning: '预警级', critical: '高危级' }
@@ -522,12 +523,15 @@ export default function App() {
           <div className="video-tabs" role="tablist" aria-label="视频画面">
             <button type="button" role="tab" aria-selected={videoTab === 'analysis'} className={videoTab === 'analysis' ? 'active' : ''} onClick={() => setVideoTab('analysis')}>AI 分析画面</button>
             <button type="button" role="tab" aria-selected={videoTab === 'raw'} className={videoTab === 'raw' ? 'active' : ''} onClick={() => setVideoTab('raw')} disabled={sourceMode !== 'ezviz'}>萤石原始画面</button>
+            <button type="button" role="tab" aria-selected={videoTab === 'audio'} className={videoTab === 'audio' ? 'active' : ''} onClick={() => setVideoTab('audio')}>声音监测</button>
           </div>
-          <span className={`video-badge ${(videoTab === 'raw' ? playerState === 'playing' : status.is_running) ? 'live' : 'idle'}`}>
+          <span className={`video-badge ${(videoTab === 'raw' ? playerState === 'playing' : videoTab === 'audio' ? false : status.is_running) ? 'live' : 'idle'}`}>
             <span className="dot" />
             {videoTab === 'raw'
               ? (playerState === 'playing' ? '正在播放' : playerState === 'loading' ? '正在连接' : playerState === 'error' ? '播放失败' : '待启动')
-              : (status.is_running ? '监控中' : '待启动')}
+              : videoTab === 'audio'
+                ? '声音监测'
+                : (status.is_running ? '监控中' : '待启动')}
           </span>
         </div>
         <div className="video-container">
@@ -536,13 +540,15 @@ export default function App() {
               <img ref={videoImgRef} alt="AI 分析实时画面" className="video-frame" />
               {!status.is_running && <div className="video-placeholder"><span>点击「启动监控」开始查看分析画面</span></div>}
             </>
-          ) : (
+          ) : videoTab === 'raw' ? (
             <>
               {playerConfig
                 ? <EzvizPlayer active={videoTab === 'raw'} config={playerConfig} setPlayerState={setPlayerState} setPlayerError={setPlayerError} />
                 : <div className="video-placeholder"><span>选择在线设备并启动监控后显示原始画面</span></div>}
               {playerState === 'error' && <div className="video-error" role="alert">{playerError}</div>}
             </>
+          ) : (
+            <AudioMonitor />
           )}
         </div>
         {videoTab === 'raw' && selectedDeviceId && <div className="video-actions"><button className="btn btn-secondary" type="button" onClick={refreshPlayer}>{playerConfig ? '刷新播放授权' : '加载原始画面'}</button></div>}

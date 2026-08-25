@@ -138,6 +138,10 @@ alert:
     before_seconds: 15                   # 预警前保存15秒
     after_seconds: 15                    # 预警后保存15秒
     format: "mp4"
+  # 音频触发预警阈值
+  audio:
+    impact_critical_threshold: 0.70      # 撞击声触发高危阈值
+    vocal_attention_threshold: 0.50      # 人声呼救至少关注级阈值
 
 # ── 声音事件识别 (PANNs Cnn14) ──
 audio:
@@ -155,6 +159,10 @@ audio:
   impact:
     threshold: 0.30
     indices: [358, 359, 441, 443, 460, 466, 469, 470]
+  # 音频源配置
+  source: "auto"                         # auto | mic | off | rtsp://... | 文件路径
+  input_device: null                     # sounddevice 输入设备编号 (null=系统默认)
+  ffmpeg_path: ""                        # RTSP音频解码用 ffmpeg 路径 (空=从PATH查找)
 
 # ── 模型参数 (FallRiskPredictor) ──
 model:
