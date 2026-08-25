@@ -1,0 +1,111 @@
+{
+  "success": true,
+  "outcome": "passed",
+  "repairable": true,
+  "terminalViolations": [],
+  "terminalBlockingSummary": null,
+  "skillProvenance": {
+    "name": "solo-design",
+    "version": "2026.08.06.19.15.08",
+    "version_source": "skill-release-manifest.json",
+    "runtime_skill_dir": null,
+    "recorded_at": null,
+    "expected_version": "2026.08.06.19.15.08",
+    "status": "matched",
+    "read_status": "ok"
+  },
+  "operatingMode": "free-explore",
+  "renderBlockingErrorCount": 0,
+  "softWarningCount": 9,
+  "renderBlockingErrors": [],
+  "errorSignatures": [],
+  "softWarnings": [
+    "[repair-ledger] validationRepairLedger[0].failedReportPath is missing",
+    "[repair-ledger] validationRepairLedger[0].failedReportHash is missing",
+    "[repair-ledger] validationRepairLedger[0].repairWorkflowReadPath is missing",
+    "[repair-ledger] validationRepairLedger[0].ownerTriage[] is missing",
+    "[repair-ledger] validationRepairLedger[0].repairActions[] is missing",
+    "[repair-ledger] validationRepairLedger[0].revalidationReportPath is missing",
+    "[repair-ledger] validationRepairLedger[0].revalidationReportHash is missing",
+    "[repair-ledger] validationRepairLedger[0].revalidationSuccess should be a boolean",
+    "[repair-ledger] validationHistory has 1 failed validation(s) but repairEntryEvidence has 0 entries"
+  ],
+  "repairPlanHints": [],
+  "repairActionTable": [],
+  "errorCount": 0,
+  "warningCount": 9,
+  "errors": [],
+  "warnings": [
+    "[repair-ledger] validationRepairLedger[0].failedReportPath is missing",
+    "[repair-ledger] validationRepairLedger[0].failedReportHash is missing",
+    "[repair-ledger] validationRepairLedger[0].repairWorkflowReadPath is missing",
+    "[repair-ledger] validationRepairLedger[0].ownerTriage[] is missing",
+    "[repair-ledger] validationRepairLedger[0].repairActions[] is missing",
+    "[repair-ledger] validationRepairLedger[0].revalidationReportPath is missing",
+    "[repair-ledger] validationRepairLedger[0].revalidationReportHash is missing",
+    "[repair-ledger] validationRepairLedger[0].revalidationSuccess should be a boolean",
+    "[repair-ledger] validationHistory has 1 failed validation(s) but repairEntryEvidence has 0 entries"
+  ],
+  "validationRunDisciplineStatus": {
+    "declared": true,
+    "restoreMode": false,
+    "maxFullValidationRuns": 2,
+    "validationHistoryCount": 1,
+    "repairLedgerCount": 1,
+    "softWarningsTriggerRepair": false,
+    "terminalState": null,
+    "nextAction": null,
+    "violations": [],
+    "success": true
+  },
+  "terminalState": null,
+  "nextCheck": {
+    "type": "finish-readiness",
+    "command": "node \"c:\\Users\\31771\\.trae-cn\\builtin\\design\\default\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\validate-finish-readiness.mjs\" \"e:\\fengxian\\fall-risk-prediction\\frontend\\fall-risk-dashboard-draft\" --check=all",
+    "fullValidationAllowed": false,
+    "reason": "workspace validation passed; run complete finish readiness before final delivery"
+  },
+  "repairBatch": [],
+  "repairContextPacket": {
+    "schema_version": "1.0",
+    "purpose": "small-context repair packet; read this before full validation-report.json",
+    "success": true,
+    "terminalState": null,
+    "skillProvenance": {
+      "name": "solo-design",
+      "version": "2026.08.06.19.15.08",
+      "version_source": "skill-release-manifest.json",
+      "runtime_skill_dir": null,
+      "recorded_at": null,
+      "expected_version": "2026.08.06.19.15.08",
+      "status": "matched",
+      "read_status": "ok"
+    },
+    "renderBlockingErrorCount": 0,
+    "softWarningCount": 9,
+    "renderBlockingErrors": [],
+    "repairActionTable": [],
+    "nextCheck": {
+      "type": "finish-readiness",
+      "command": "node \"c:\\Users\\31771\\.trae-cn\\builtin\\design\\default\\skills\\solo-design\\shared-runtime\\deterministic-tooling\\validate-finish-readiness.mjs\" \"e:\\fengxian\\fall-risk-prediction\\frontend\\fall-risk-dashboard-draft\" --check=all",
+      "fullValidationAllowed": false,
+      "reason": "workspace validation passed; run complete finish readiness before final delivery"
+    },
+    "forbidden": [
+      "do not read validator source",
+      "do not rerun full validation when nextCheck.fullValidationAllowed=false",
+      "do not start preview/browser unless user explicitly asks",
+      "do not hand-edit repair ledger fields"
+    ]
+  },
+  "projectFileHashes": {
+    "fall-risk-dashboard-draft.design": "568c9535c666b5742d7e780efb7241514423fefa9966e629e8e39a2f1ef82966",
+    "runtime-orchestration-summary.json": "bde59495401ebe766511ab159f677b37e420736b0bbf51966069547f1a68cf27",
+    "pages/audio.html": "b5ea4de8beb12c40b40e0816ea70efd0b9bbcb16befc248f602ee6fe54096889",
+    "pages/dashboard.html": "5957efb0fa779ea5e100a9af732d825384b3576f1a3cfa41d428a6f1338461f2"
+  },
+  "designDir": "e:\\fengxian\\fall-risk-prediction\\frontend\\fall-risk-dashboard-draft",
+  "expectedPages": 2,
+  "requireInteractions": "tab-audio:pages/dashboard.html,back-dashboard:pages/audio.html",
+  "checkedAt": "2026-08-25T14:27:27.106Z"
+}

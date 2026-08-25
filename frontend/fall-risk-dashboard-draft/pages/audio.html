@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>声音监测</title>
+    <style id="theme-vars">
+/* ============================================================
+   跌倒风险预测系统 — 草稿重设计版
+   设计方向：医疗监护级看板 · 高对比 · 一眼判断 · 平静可信
+   Token 前缀：fr（fall-risk）
+   浅色/深色双主题，通过 <html class="light|dark"> 切换
+   ============================================================ */
+
+/* ── 亮色主题 Token ── */
+:root {
+  /* 语义色（apply-html-head-contract 必需映射） */
+  --fr-background: #eef2f7;
+  --fr-foreground: #0f172a;
+  --fr-card: #ffffff;
+  --fr-card-foreground: #0f172a;
+  --fr-primary: #1d4ed8;
+  --fr-primary-hover: #1e40af;
+  --fr-primary-foreground: #ffffff;
+  --fr-primary-soft: #e8effc;
+  --fr-border: #d8e0ec;
+  --fr-muted: #f1f4f9;
+  --fr-muted-foreground: #64748b;
+
+  /* 表层与输入 */
+  --fr-surface: #f7f9fc;
+  --fr-input: #ffffff;
+  --fr-input-border: #cbd5e1;
+  --fr-ring: rgba(29, 78, 216, 0.28);
+  --fr-focus-ring: rgba(29, 78, 216, 0.16);
+
+  /* 圆角 */
+  --fr-radius-sm: 6px;
+  --fr-radius-md: 8px;
+  --fr-radius-lg: 12px;
+  --fr-radius-xl: 16px;
+
+  /* 阴影（静态表面极轻，仅悬浮层级加深） */
+  --fr-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --fr-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --fr-shadow-lg: 0 8px 20px rgba(15, 23, 42, 0.05);
+
+  /* 状态色（仅用于真实状态/风险/破坏性操作） */
+  --fr-state-success: #15803d;
+  --fr-state-warning: #b45309;
+  --fr-state-error: #b91c1c;
+  --fr-state-info: #0369a1;
+  --fr-success-soft: #ecfdf3;
+  --fr-warning-soft: #fff8e6;
+  --fr-error-soft: #fef0f0;
+  --fr-info-soft: #eaf4fb;
+
+  /* 四级风险 */
+  --fr-risk-low: #15803d;
+  --fr-risk-attention: #a16207;
+  --fr-risk-warning: #c2410c;
+  --fr-risk-critical: #b91c1c;
+  --fr-risk-low-soft: #ecfdf3;
+  --fr-risk-attention-soft: #fdf6e3;
+  --fr-risk-warning-soft: #fff1e7;
+  --fr-risk-critical-soft: #fef0f0;
+
+  /* 图表（数据可视化身份色，Chart.js 运行时读取） */
+  --fr-chart-grid: #e4eaf2;
+  --fr-chart-text: #475569;
+  --fr-chart-primary: #1d4ed8;
+  --fr-chart-low: #15803d;
+  --fr-chart-attention: #a16207;
+  --fr-chart-warning: #c2410c;
+  --fr-chart-critical: #b91c1c;
+
+  /* 视频占位与告警 */
+  --fr-video-bg: #0b1220;
+  --fr-error-banner-bg: rgba(185, 28, 28, 0.08);
+  --fr-error-banner-border: rgba(185, 28, 28, 0.28);
+
+  /* 字体 */
+  --fr-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --fr-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* 动效 */
+  --fr-transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── 暗色主题 Token ── */
+html.dark {
+  --fr-background: #0b1220;
+  --fr-foreground: #e7edf7;
+  --fr-card: #131c2e;
+  --fr-card-foreground: #e7edf7;
+  --fr-primary: #6d9bff;
+  --fr-primary-hover: #8ab2ff;
+  --fr-primary-foreground: #0b1220;
+  --fr-primary-soft: #1c2b4a;
+  --fr-border: #243349;
+  --fr-muted: #182438;
+  --fr-muted-foreground: #8ea0ba;
+
+  --fr-surface: #101a2b;
+  --fr-input: #182438;
+  --fr-input-border: #33445e;
+  --fr-ring: rgba(109, 155, 255, 0.35);
+  --fr-focus-ring: rgba(109, 155, 255, 0.2);
+
+  --fr-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --fr-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.26);
+  --fr-shadow-lg: 0 8px 20px rgba(0, 0, 0, 0.38);
+
+  --fr-state-success: #4ade80;
+  --fr-state-warning: #fbbf24;
+  --fr-state-error: #f87171;
+  --fr-state-info: #38bdf8;
+  --fr-success-soft: rgba(34, 197, 94, 0.14);
+  --fr-warning-soft: rgba(245, 158, 11, 0.14);
+  --fr-error-soft: rgba(239, 68, 68, 0.14);
+  --fr-info-soft: rgba(14, 165, 233, 0.14);
+
+  --fr-risk-low: #4ade80;
+  --fr-risk-attention: #fbbf24;
+  --fr-risk-warning: #fb923c;
+  --fr-risk-critical: #f87171;
+  --fr-risk-low-soft: rgba(34, 197, 94, 0.12);
+  --fr-risk-attention-soft: rgba(245, 158, 11, 0.12);
+  --fr-risk-warning-soft: rgba(249, 115, 22, 0.12);
+  --fr-risk-critical-soft: rgba(239, 68, 68, 0.12);
+
+  --fr-chart-grid: #243349;
+  --fr-chart-text: #8ea0ba;
+  --fr-chart-primary: #6d9bff;
+  --fr-chart-low: #4ade80;
+  --fr-chart-attention: #fbbf24;
+  --fr-chart-warning: #fb923c;
+  --fr-chart-critical: #f87171;
+
+  --fr-error-banner-bg: rgba(239, 68, 68, 0.1);
+  --fr-error-banner-border: rgba(239, 68, 68, 0.32);
+}
+
+/* ── 基础重置 ── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--fr-font-sans);
+  background: var(--fr-background);
+  color: var(--fr-foreground);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--fr-transition), color var(--fr-transition);
+}
+
+button, input, select { font-family: inherit; }
+
+/* ============================================================
+   组件层（两页共享，保证延续性锚点）
+   ============================================================ */
+
+/* ── 按钮 ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 1px solid transparent;
+  border-radius: var(--fr-radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--fr-transition), border-color var(--fr-transition), color var(--fr-transition), box-shadow var(--fr-transition), transform 0.1s ease;
+}
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn:focus-visible { outline: 2px solid var(--fr-primary); outline-offset: 2px; }
+
+.btn-primary { background: var(--fr-primary); color: var(--fr-primary-foreground); }
+.btn-primary:hover:not(:disabled) { background: var(--fr-primary-hover); }
+
+.btn-danger { background: var(--fr-state-error); color: #ffffff; }
+html.dark .btn-danger { background: #dc2626; }
+.btn-danger:hover:not(:disabled) { background: #b91c1c; }
+html.dark .btn-danger:hover:not(:disabled) { background: #ef4444; }
+
+.btn-secondary {
+  background: var(--fr-card);
+  color: var(--fr-muted-foreground);
+  border-color: var(--fr-border);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--fr-muted); color: var(--fr-foreground); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--fr-muted-foreground);
+  border-color: transparent;
+}
+.btn-ghost:hover:not(:disabled) { background: var(--fr-muted); color: var(--fr-foreground); }
+
+.btn-lg { padding: 13px 28px; font-size: 15px; border-radius: var(--fr-radius-md); }
+.btn-icon {
+  width: 38px; height: 38px; padding: 0;
+  border-radius: var(--fr-radius-md);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ── 表单控件 ── */
+.input, .select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--fr-input-border);
+  border-radius: var(--fr-radius-md);
+  background: var(--fr-input);
+  color: var(--fr-foreground);
+  font-size: 14px;
+  transition: border-color var(--fr-transition), box-shadow var(--fr-transition);
+  outline: none;
+}
+.input::placeholder { color: var(--fr-muted-foreground); }
+.input:focus, .select:focus {
+  border-color: var(--fr-primary);
+  box-shadow: 0 0 0 3px var(--fr-focus-ring);
+}
+.select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--fr-muted-foreground) 50%), linear-gradient(135deg, var(--fr-muted-foreground) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 55%, calc(100% - 13px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 34px;
+  cursor: pointer;
+}
+.select:disabled, .input:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--fr-muted-foreground);
+  margin-bottom: 6px;
+}
+
+/* ── 卡片 ── */
+.card {
+  background: var(--fr-card);
+  border: 1px solid var(--fr-border);
+  border-radius: var(--fr-radius-lg);
+  box-shadow: var(--fr-shadow);
+}
+
+/* ── 分段控件（模式/标签页） ── */
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--fr-muted);
+  border: 1px solid var(--fr-border);
+  border-radius: var(--fr-radius-md);
+}
+.seg button {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fr-muted-foreground);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--fr-transition), color var(--fr-transition), box-shadow var(--fr-transition);
+}
+.seg button.active { background: var(--fr-card); color: var(--fr-foreground); box-shadow: var(--fr-shadow-sm); }
+.seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+.seg button:focus-visible { outline: 2px solid var(--fr-primary); outline-offset: 1px; }
+
+/* ── 徽标 ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.badge-low { background: var(--fr-risk-low-soft); color: var(--fr-risk-low); }
+.badge-attention { background: var(--fr-risk-attention-soft); color: var(--fr-risk-attention); }
+.badge-warning { background: var(--fr-risk-warning-soft); color: var(--fr-risk-warning); }
+.badge-critical { background: var(--fr-risk-critical-soft); color: var(--fr-risk-critical); }
+.badge-neutral { background: var(--fr-muted); color: var(--fr-muted-foreground); }
+.badge-live { background: var(--fr-success-soft); color: var(--fr-state-success); }
+
+/* ── 状态圆点 ── */
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--fr-muted-foreground);
+  flex-shrink: 0;
+}
+.status-dot.online { background: var(--fr-state-success); box-shadow: 0 0 0 3px var(--fr-success-soft); }
+.status-dot.offline { background: var(--fr-muted-foreground); }
+.status-dot.recording { background: var(--fr-state-error); box-shadow: 0 0 0 3px var(--fr-error-soft); animation: fr-pulse 1.4s infinite; }
+.status-dot.analyzing { background: var(--fr-state-warning); box-shadow: 0 0 0 3px var(--fr-warning-soft); }
+.status-dot.ready { background: var(--fr-state-success); box-shadow: 0 0 0 3px var(--fr-success-soft); }
+
+/* ── 区块标题（左侧强调条） ── */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fr-foreground);
+}
+.section-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--fr-primary);
+  flex-shrink: 0;
+}
+.section-title.title-danger::before { background: var(--fr-state-error); }
+.section-title.title-success::before { background: var(--fr-state-success); }
+
+/* ── 数值/等宽 ── */
+.mono { font-family: var(--fr-font-mono); font-variant-numeric: tabular-nums; }
+
+/* ── 空态 ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 20px;
+  color: var(--fr-muted-foreground);
+  font-size: 14px;
+  text-align: center;
+}
+.empty-state .empty-title { font-weight: 600; color: var(--fr-muted-foreground); }
+.empty-state .empty-hint { font-size: 13px; opacity: 0.85; }
+
+/* ── 错误横幅 ── */
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--fr-error-banner-bg);
+  border: 1px solid var(--fr-error-banner-border);
+  border-radius: var(--fr-radius-md);
+  color: var(--fr-state-error);
+  font-size: 13px;
+}
+
+/* ── 事件徽章 ── */
+.event-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--fr-border);
+  background: var(--fr-muted);
+  color: var(--fr-muted-foreground);
+  white-space: nowrap;
+}
+.event-badge.voice { background: var(--fr-warning-soft); color: var(--fr-state-warning); border-color: rgba(180, 83, 9, 0.3); }
+html.dark .event-badge.voice { border-color: rgba(251, 191, 36, 0.3); }
+.event-badge.impact { background: var(--fr-error-soft); color: var(--fr-state-error); border-color: rgba(185, 28, 28, 0.3); }
+html.dark .event-badge.impact { border-color: rgba(248, 113, 113, 0.3); }
+
+/* ── 页脚 ── */
+.app-footer {
+  margin-top: 40px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--fr-border);
+  color: var(--fr-muted-foreground);
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── 动画 ── */
+@keyframes fr-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.15); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--fr-background);
+    --color-foreground: var(--fr-foreground);
+    --color-card: var(--fr-card);
+    --color-card-foreground: var(--fr-card-foreground);
+    --color-primary: var(--fr-primary);
+    --color-primary-foreground: var(--fr-primary-foreground);
+    --color-muted: var(--fr-muted);
+    --color-muted-foreground: var(--fr-muted-foreground);
+    --color-border: var(--fr-border);
+    --color-input: var(--fr-input);
+    --color-ring: var(--fr-ring);
+    --radius-sm: var(--fr-radius-sm);
+    --radius-md: var(--fr-radius-md);
+    --radius-lg: var(--fr-radius-lg);
+    --radius-xl: var(--fr-radius-xl);
+  }
+  @layer base {
+    body { background: var(--fr-background); color: var(--fr-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--fr-background); }
+      .text-background { color: var(--fr-background); }
+      .border-background { border-color: var(--fr-background); }
+      .ring-background { --tw-ring-color: var(--fr-background); }
+      .bg-foreground { background-color: var(--fr-foreground); }
+      .text-foreground { color: var(--fr-foreground); }
+      .border-foreground { border-color: var(--fr-foreground); }
+      .ring-foreground { --tw-ring-color: var(--fr-foreground); }
+      .bg-card { background-color: var(--fr-card); }
+      .text-card { color: var(--fr-card); }
+      .border-card { border-color: var(--fr-card); }
+      .ring-card { --tw-ring-color: var(--fr-card); }
+      .bg-card-foreground { background-color: var(--fr-card-foreground); }
+      .text-card-foreground { color: var(--fr-card-foreground); }
+      .border-card-foreground { border-color: var(--fr-card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--fr-card-foreground); }
+      .bg-primary { background-color: var(--fr-primary); }
+      .text-primary { color: var(--fr-primary); }
+      .border-primary { border-color: var(--fr-primary); }
+      .ring-primary { --tw-ring-color: var(--fr-primary); }
+      .bg-primary-foreground { background-color: var(--fr-primary-foreground); }
+      .text-primary-foreground { color: var(--fr-primary-foreground); }
+      .border-primary-foreground { border-color: var(--fr-primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--fr-primary-foreground); }
+      .bg-muted { background-color: var(--fr-muted); }
+      .text-muted { color: var(--fr-muted); }
+      .border-muted { border-color: var(--fr-muted); }
+      .ring-muted { --tw-ring-color: var(--fr-muted); }
+      .bg-muted-foreground { background-color: var(--fr-muted-foreground); }
+      .text-muted-foreground { color: var(--fr-muted-foreground); }
+      .border-muted-foreground { border-color: var(--fr-muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--fr-muted-foreground); }
+      .bg-border { background-color: var(--fr-border); }
+      .text-border { color: var(--fr-border); }
+      .border-border { border-color: var(--fr-border); }
+      .ring-border { --tw-ring-color: var(--fr-border); }
+      .bg-input { background-color: var(--fr-input); }
+      .text-input { color: var(--fr-input); }
+      .border-input { border-color: var(--fr-input); }
+      .ring-input { --tw-ring-color: var(--fr-input); }
+      .bg-ring { background-color: var(--fr-ring); }
+      .text-ring { color: var(--fr-ring); }
+      .border-ring { border-color: var(--fr-ring); }
+      .ring-ring { --tw-ring-color: var(--fr-ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main>
+      <div class="page-shell">
+
+        <!-- 顶部系统栏 -->
+        <header class="topbar">
+          <div class="topbar-left">
+            <a href="dashboard.html" class="btn btn-secondary" data-dom-id="back-dashboard">
+              <i data-lucide="arrow-left"></i> 返回看板
+            </a>
+          </div>
+          <div class="topbar-brand">
+            <span class="topbar-brand-icon"><i data-lucide="audio-lines"></i></span>
+            <div>
+              <div class="topbar-title">跌倒风险预测系统</div>
+              <div class="topbar-sub">声音监测工作台</div>
+            </div>
+          </div>
+          <div class="topbar-right">
+            <button type="button" class="btn btn-ghost btn-icon" id="theme-toggle" data-dom-id="theme-toggle" title="切换主题" aria-label="切换主题">
+              <i data-lucide="moon"></i>
+            </button>
+          </div>
+        </header>
+
+        <!-- 状态栏卡片 -->
+        <section class="card audio-statusbar" aria-label="监测状态">
+          <div class="status-group">
+            <span class="status-dot ready" id="status-dot" data-state="ready"></span>
+            <div>
+              <div class="status-text" id="status-text">就绪</div>
+              <div class="status-detail mono" id="status-detail">yamnet | 32000Hz | 模型已加载: 是</div>
+            </div>
+          </div>
+          <div class="status-actions">
+            <label class="btn btn-secondary" id="btn-upload" data-dom-id="btn-upload">
+              <i data-lucide="upload"></i> 上传音频
+              <input type="file" id="file-input" accept=".wav,.flac,.ogg,audio/*" style="display:none" aria-label="上传音频文件">
+            </label>
+            <button type="button" class="btn btn-primary" id="btn-record" data-dom-id="btn-record">
+              <i data-lucide="mic" id="record-icon"></i><span id="record-label">开始实时监测</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- 错误提示区 -->
+        <div class="error-banner section-block" id="mic-error" hidden>
+          <i data-lucide="alert-triangle"></i>
+          <span>麦克风访问失败：未授予录音权限，请在浏览器地址栏允许后重试。</span>
+        </div>
+        <div class="error-banner" id="error" hidden>
+          <i data-lucide="alert-circle"></i>
+          <span>音频文件解析失败：文件格式不受支持或文件已损坏。</span>
+        </div>
+
+        <!-- 管线实时监测 -->
+        <section class="card pipeline-card section-block" aria-label="管线实时监测">
+          <div class="card-head">
+            <h2 class="section-title">管线实时监测</h2>
+            <span class="badge badge-live"><span class="status-dot online"></span>监测中</span>
+          </div>
+          <div class="kpi-grid">
+            <div class="kpi-item">
+              <div class="kpi-label">音频来源</div>
+              <div class="kpi-value">麦克风</div>
+            </div>
+            <div class="kpi-item">
+              <div class="kpi-label">已处理</div>
+              <div class="kpi-value">42 块</div>
+            </div>
+            <div class="kpi-item">
+              <div class="kpi-label">最近分析</div>
+              <div class="kpi-value">4.8s</div>
+            </div>
+            <div class="kpi-item">
+              <div class="kpi-label">耗时</div>
+              <div class="kpi-value">312ms</div>
+            </div>
+          </div>
+          <div class="error-banner pipeline-error" id="pipeline-error" hidden>
+            <i data-lucide="alert-triangle"></i>
+            <span>管线处理中断：音频设备数据流丢失，正在等待恢复。</span>
+          </div>
+          <div class="pipeline-grid">
+            <div>
+              <h3 class="block-title">检测到的声音事件</h3>
+              <div class="event-list">
+                <span class="event-badge voice">[人声呼救] 呼救声 (0.87) @ 1.2s</span>
+                <span class="event-badge impact">[碰撞声] 跌倒撞击 (0.92) @ 3.6s</span>
+                <span class="event-badge voice">[人声呼救] 呻吟声 (0.64) @ 5.1s</span>
+              </div>
+            </div>
+            <div>
+              <h3 class="block-title">声音标签分布</h3>
+              <div class="chart-box">
+                <canvas id="pipeline-tag-chart"></canvas>
+              </div>
+            </div>
+          </div>
+          <div class="empty-state" id="pipeline-empty" hidden>
+            <i data-lucide="audio-lines"></i>
+            <div class="empty-title">等待音频数据...</div>
+            <div class="empty-hint">开始实时监测或上传音频文件后，此处将显示检测结果</div>
+          </div>
+        </section>
+
+        <!-- 手动音频分析 -->
+        <h2 class="section-title title-success section-block">手动音频分析</h2>
+
+        <!-- 音频分析配置 -->
+        <section class="card pipeline-card section-block" aria-label="音频分析配置">
+          <div class="card-head">
+            <h2 class="section-title">音频分析配置</h2>
+          </div>
+          <div class="config-grid">
+            <div class="cfg-card">
+              <div class="cfg-label">model_type</div>
+              <div class="cfg-value">yamnet</div>
+            </div>
+            <div class="cfg-card">
+              <div class="cfg-label">sample_rate</div>
+              <div class="cfg-value">32000</div>
+            </div>
+            <div class="cfg-card">
+              <div class="cfg-label">model_loaded</div>
+              <div class="cfg-value">true</div>
+            </div>
+            <div class="cfg-card">
+              <div class="cfg-label">enabled</div>
+              <div class="cfg-value">true</div>
+            </div>
+            <div class="cfg-card">
+              <div class="cfg-label">chunks_processed</div>
+              <div class="cfg-value">42</div>
+            </div>
+            <div class="cfg-card">
+              <div class="cfg-label">last_analyzed_at</div>
+              <div class="cfg-value">2026-08-25 14:32:08</div>
+            </div>
+            <div class="cfg-card">
+              <div class="cfg-label">event_threshold</div>
+              <div class="cfg-value">0.50</div>
+            </div>
+            <div class="cfg-card">
+              <div class="cfg-label">audio_device</div>
+              <div class="cfg-value">default</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 实时波形 -->
+        <section class="card waveform-box section-block" aria-label="实时波形">
+          <div class="card-head">
+            <h2 class="section-title">实时波形</h2>
+          </div>
+          <canvas id="waveform-canvas" class="audio-waveform"></canvas>
+        </section>
+
+        <!-- 分析结果 -->
+        <section class="card results-card section-block" aria-label="分析结果">
+          <div class="card-head">
+            <h2 class="section-title">分析结果</h2>
+          </div>
+          <div class="meta-row">
+            <span class="meta-item">时长: <span class="mono">4.80s</span></span>
+            <span class="meta-item">耗时: <span class="mono">312.0ms</span></span>
+          </div>
+          <div class="result-block">
+            <h3 class="block-title">检测到的事件 (2)</h3>
+            <div class="event-list">
+              <span class="event-badge voice">[人声呼救] 呼救声 (0.87)</span>
+              <span class="event-badge impact">[碰撞声] 跌倒撞击 (0.92)</span>
+            </div>
+          </div>
+          <div class="result-block">
+            <h3 class="block-title">Top 标签</h3>
+            <div class="chart-box-lg">
+              <canvas id="result-top-chart"></canvas>
+            </div>
+          </div>
+          <div class="empty-state" id="result-empty" hidden>
+            <i data-lucide="file-audio"></i>
+            <div class="empty-title">上传音频文件或点击「开始实时监测」查看分析结果</div>
+          </div>
+        </section>
+
+        <!-- 页脚 -->
+        <footer class="app-footer">
+          <span>跌倒风险预测系统 · 重设计草稿</span>
+          <span>声音事件监测</span>
+        </footer>
+
+      </div>
+    </main>
+
+    <style id="critical-layout">
+      .page-shell { max-width: 1120px; margin: 0 auto; padding: 24px 28px 48px; }
+      .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 0 20px; flex-wrap: wrap; }
+      .topbar-left, .topbar-right { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+      .topbar-brand { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 12px; min-width: 0; }
+      .topbar-brand-icon { width: 38px; height: 38px; flex-shrink: 0; border-radius: var(--fr-radius-md); background: var(--fr-primary-soft); color: var(--fr-primary); display: inline-flex; align-items: center; justify-content: center; }
+      .topbar-title { font-size: 17px; font-weight: 700; line-height: 1.3; color: var(--fr-foreground); }
+      .topbar-sub { font-size: 12px; color: var(--fr-muted-foreground); }
+      .btn svg, .badge svg, .event-badge svg, .error-banner svg, .empty-state svg, .topbar-brand-icon svg { width: 16px; height: 16px; }
+      .audio-statusbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px; flex-wrap: wrap; }
+      .status-group { display: flex; align-items: center; gap: 14px; min-width: 0; }
+      .status-text { font-size: 15px; font-weight: 700; color: var(--fr-foreground); }
+      .status-detail { font-size: 12px; color: var(--fr-muted-foreground); margin-top: 2px; }
+      .status-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .section-block { margin-top: 24px; }
+      .pipeline-card, .results-card, .waveform-box { padding: 20px; }
+      .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+      .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+      .kpi-item { background: var(--fr-surface); border: 1px solid var(--fr-border); border-radius: var(--fr-radius-md); padding: 14px 16px; }
+      .kpi-label { font-size: 12px; color: var(--fr-muted-foreground); }
+      .kpi-value { font-size: 18px; font-weight: 700; color: var(--fr-foreground); margin-top: 4px; font-variant-numeric: tabular-nums; }
+      .pipeline-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 18px; }
+      .block-title { font-size: 13px; font-weight: 700; color: var(--fr-foreground); margin-bottom: 10px; }
+      .event-list { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+      .chart-box { position: relative; height: 220px; }
+      .chart-box-lg { position: relative; height: 280px; }
+      .pipeline-error { margin-top: 14px; }
+      .config-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .cfg-card { background: var(--fr-surface); border: 1px solid var(--fr-border); border-radius: var(--fr-radius-md); padding: 12px 14px; }
+      .cfg-label { font-size: 11px; color: var(--fr-muted-foreground); font-family: var(--fr-font-mono); letter-spacing: 0.02em; }
+      .cfg-value { font-size: 14px; font-weight: 600; color: var(--fr-foreground); font-family: var(--fr-font-mono); margin-top: 6px; overflow-wrap: anywhere; }
+      .audio-waveform { width: 100%; height: 120px; display: block; border-radius: var(--fr-radius-md); background: linear-gradient(180deg, var(--fr-primary-soft) 0%, var(--fr-muted) 100%); border: 1px solid var(--fr-border); }
+      .meta-row { display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 16px; }
+      .meta-item { font-size: 13px; color: var(--fr-muted-foreground); }
+      .meta-item .mono { color: var(--fr-foreground); font-weight: 600; }
+      .result-block { margin-top: 14px; }
+      @media (max-width: 900px) {
+        .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        .pipeline-grid, .config-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+
+    <script>
+      (function () {
+        var root = document.documentElement;
+
+        var cssVar = function (name, fb) {
+          var v = getComputedStyle(root).getPropertyValue(name).trim();
+          return v || fb;
+        };
+
+        /* 主题切换 */
+        var themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+          themeToggle.addEventListener('click', function () {
+            root.classList.toggle('dark');
+            var icon = themeToggle.querySelector('[data-lucide]');
+            icon.setAttribute('data-lucide', root.classList.contains('dark') ? 'sun' : 'moon');
+            lucide.createIcons();
+            rebuildCharts();
+            drawWaveform();
+          });
+        }
+
+        /* 上传音频 */
+        var fileInput = document.getElementById('file-input');
+        var btnUpload = document.getElementById('btn-upload');
+        if (btnUpload && fileInput) {
+          btnUpload.addEventListener('click', function (e) {
+            e.preventDefault();
+            fileInput.click();
+          });
+        }
+
+        /* 开始/停止实时监测 */
+        var btnRecord = document.getElementById('btn-record');
+        var statusDot = document.getElementById('status-dot');
+        var statusText = document.getElementById('status-text');
+        var statusDetail = document.getElementById('status-detail');
+        var recordIcon = document.getElementById('record-icon');
+        var recordLabel = document.getElementById('record-label');
+        var recording = false;
+        if (btnRecord) {
+          btnRecord.addEventListener('click', function () {
+            recording = !recording;
+            if (recording) {
+              btnRecord.classList.add('btn-danger');
+              btnRecord.classList.remove('btn-primary');
+              recordIcon.setAttribute('data-lucide', 'square');
+              recordLabel.textContent = '停止录音';
+              statusDot.classList.remove('ready', 'analyzing');
+              statusDot.classList.add('recording');
+              statusDot.setAttribute('data-state', 'recording');
+              statusText.textContent = '录音中...';
+              statusDetail.textContent = 'yamnet | 32000Hz | 正在采集音频数据';
+            } else {
+              btnRecord.classList.add('btn-primary');
+              btnRecord.classList.remove('btn-danger');
+              recordIcon.setAttribute('data-lucide', 'mic');
+              recordLabel.textContent = '开始实时监测';
+              statusDot.classList.remove('ready', 'recording');
+              statusDot.classList.add('analyzing');
+              statusDot.setAttribute('data-state', 'analyzing');
+              statusText.textContent = '分析中...';
+              statusDetail.textContent = 'yamnet | 32000Hz | 模型已加载: 是';
+              setTimeout(function () {
+                statusDot.classList.remove('analyzing', 'recording');
+                statusDot.classList.add('ready');
+                statusDot.setAttribute('data-state', 'ready');
+                statusText.textContent = '就绪';
+                statusDetail.textContent = 'yamnet | 32000Hz | 模型已加载: 是';
+              }, 1200);
+            }
+            lucide.createIcons();
+          });
+        }
+
+        /* 图表（颜色读取 var(--fr-chart-*)） */
+        var chartInstances = [];
+        function destroyCharts() {
+          chartInstances.forEach(function (c) { c.destroy(); });
+          chartInstances = [];
+        }
+        function buildChart(id, labels, values) {
+          var el = document.getElementById(id);
+          if (!el || typeof Chart === 'undefined') return;
+          var colors = values.map(function (v) {
+            return v >= 0.6 ? cssVar('--fr-chart-warning', '#c2410c') : cssVar('--fr-chart-primary', '#1d4ed8');
+          });
+          var c = new Chart(el, {
+            type: 'bar',
+            data: {
+              labels: labels,
+              datasets: [{
+                label: '置信度',
+                data: values,
+                backgroundColor: colors,
+                borderRadius: 4,
+                barThickness: 14,
+                maxBarThickness: 18
+              }]
+            },
+            options: {
+              indexAxis: 'y',
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: {
+                  min: 0,
+                  max: 1,
+                  ticks: { color: cssVar('--fr-chart-text', '#475569'), font: { size: 11 } },
+                  grid: { color: cssVar('--fr-chart-grid', '#e4eaf2') }
+                },
+                y: {
+                  ticks: { color: cssVar('--fr-chart-text', '#475569'), font: { size: 12 } },
+                  grid: { display: false }
+                }
+              }
+            }
+          });
+          chartInstances.push(c);
+        }
+        function rebuildCharts() {
+          destroyCharts();
+          buildChart('pipeline-tag-chart', ['呼救声', '撞击声', '呻吟声', '脚步', '背景声', '静音', '咳嗽', '玻璃碎裂'], [0.87, 0.92, 0.64, 0.42, 0.31, 0.28, 0.22, 0.18]);
+          buildChart('result-top-chart', ['撞击声', '呼救声', '呻吟声', '脚步', '背景声', '静音'], [0.92, 0.87, 0.64, 0.42, 0.31, 0.28]);
+        }
+        rebuildCharts();
+
+        /* 实时波形（静态模拟） */
+        var waveCanvas = document.getElementById('waveform-canvas');
+        function drawWaveform() {
+          if (!waveCanvas) return;
+          var rect = waveCanvas.getBoundingClientRect();
+          if (rect.width === 0) return;
+          var dpr = window.devicePixelRatio || 1;
+          var w = rect.width;
+          var h = rect.height;
+          waveCanvas.width = w * dpr;
+          waveCanvas.height = h * dpr;
+          var ctx = waveCanvas.getContext('2d');
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, w, h);
+          var mid = h / 2;
+          var lineColor = cssVar('--fr-chart-primary', '#1d4ed8');
+          var softColor = cssVar('--fr-primary-soft', '#e8effc');
+          var gridColor = cssVar('--fr-chart-grid', '#e4eaf2');
+          ctx.strokeStyle = gridColor;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(0, mid);
+          ctx.lineTo(w, mid);
+          ctx.stroke();
+          var barCount = 96;
+          var gap = w / barCount;
+          var ampAt = function (i) {
+            return 0.25 + 0.75 * Math.abs(Math.sin(i * 0.55) * Math.sin(i * 0.23 + 1.2));
+          };
+          ctx.strokeStyle = softColor;
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          for (var i = 0; i < barCount * 0.6; i++) {
+            var x0 = gap * i + gap / 2;
+            var half0 = h * 0.4 * ampAt(i);
+            ctx.moveTo(x0, mid - half0);
+            ctx.lineTo(x0, mid + half0);
+          }
+          ctx.stroke();
+          ctx.strokeStyle = lineColor;
+          ctx.lineWidth = 1.6;
+          ctx.globalAlpha = 0.6;
+          ctx.beginPath();
+          for (var j = 0; j < barCount; j++) {
+            var x = gap * j + gap / 2;
+            var half = h * 0.4 * ampAt(j);
+            ctx.moveTo(x, mid - half);
+            ctx.lineTo(x, mid + half);
+          }
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        if (waveCanvas) {
+          drawWaveform();
+          window.addEventListener('resize', drawWaveform);
+        }
+      })();
+    </script>
+
+    <script>lucide.createIcons();</script>
+</body>
+</html>

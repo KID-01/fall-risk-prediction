@@ -1,0 +1,71 @@
+{
+  "data": [
+    {
+      "id": "page-dashboard",
+      "title": "监测看板",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1787665200000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 2270,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-21894953",
+          "measuredAt": 1787668745426
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/dashboard.html",
+        "interactions": [
+          {
+            "domId": "tab-audio",
+            "targetPageId": "page-audio",
+            "hideEdge": true,
+            "transitionLabel": "声音监测"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-audio",
+      "title": "声音监测",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1787665200000,
+      "canvasData": {
+        "x": 480,
+        "y": 0,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 1971,
+          "viewportWidth": 1440,
+          "sourceHash": "fnv1a-f2742727",
+          "measuredAt": 1787668208351
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/audio.html",
+        "interactions": [
+          {
+            "domId": "back-dashboard",
+            "targetPageId": "page-dashboard",
+            "hideEdge": true,
+            "transitionLabel": "返回看板"
+          }
+        ]
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "desktop",
+    "projectName": "跌倒风险预测系统",
+    "visualEditorEnabled": false,
+    "showEdge": false
+  }
+}

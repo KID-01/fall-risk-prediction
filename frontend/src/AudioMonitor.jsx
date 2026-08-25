@@ -1,7 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import * as echarts from 'echarts'
+import { Upload, Mic, Square, VolumeX, AlertTriangle, AudioLines, Loader } from './icons'
 
 const API_BASE = '/api/v1'
+
+// 从 CSS 变量读取颜色（双主题自适应）
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v || fallback
+}
 
 export default function AudioMonitor({ pipelineAudio }) {
   const [status, setStatus] = useState(null)
@@ -58,9 +65,11 @@ export default function AudioMonitor({ pipelineAudio }) {
     if (!topLabels?.length || !pipelineChartRef.current) return
 
     const chart = echarts.init(pipelineChartRef.current)
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-    const textColor = isDark ? '#e2e8f0' : '#1e293b'
-    const mutedColor = isDark ? '#64748b' : '#94a3b8'
+    const textColor = cssVar('--fr-foreground', '#1e293b')
+    const mutedColor = cssVar('--fr-chart-text', '#94a3b8')
+    const splitColor = cssVar('--fr-chart-grid', '#f1f5f9')
+    const barStart = cssVar('--fr-chart-primary', '#6366f1')
+    const barEnd = cssVar('--fr-chart-primary', '#818cf8')
 
     const labels = topLabels.slice(0, 10).map(([l]) => l)
     const scores = topLabels.slice(0, 10).map(([, s]) => s)
@@ -75,7 +84,7 @@ export default function AudioMonitor({ pipelineAudio }) {
         type: 'value',
         min: 0,
         max: 1,
-        splitLine: { lineStyle: { color: isDark ? '#334155' : '#f1f5f9' } },
+        splitLine: { lineStyle: { color: splitColor } },
         axisLabel: { fontSize: 11, color: mutedColor },
       },
       yAxis: {
@@ -92,8 +101,8 @@ export default function AudioMonitor({ pipelineAudio }) {
         itemStyle: {
           borderRadius: [0, 4, 4, 0],
           color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#6366f1' },
-            { offset: 1, color: '#818cf8' },
+            { offset: 0, color: barStart },
+            { offset: 1, color: barEnd },
           ]),
         },
         label: {
@@ -134,9 +143,11 @@ export default function AudioMonitor({ pipelineAudio }) {
     if (!results?.top_labels?.length || !chartRef.current) return
 
     const chart = echarts.init(chartRef.current)
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-    const textColor = isDark ? '#e2e8f0' : '#1e293b'
-    const mutedColor = isDark ? '#64748b' : '#94a3b8'
+    const textColor = cssVar('--fr-foreground', '#1e293b')
+    const mutedColor = cssVar('--fr-chart-text', '#94a3b8')
+    const splitColor = cssVar('--fr-chart-grid', '#f1f5f9')
+    const barStart = cssVar('--fr-chart-primary', '#3b82f6')
+    const barEnd = cssVar('--fr-chart-primary', '#60a5fa')
 
     const labels = results.top_labels.map(([l]) => l)
     const scores = results.top_labels.map(([, s]) => s)
@@ -151,13 +162,13 @@ export default function AudioMonitor({ pipelineAudio }) {
         type: 'value',
         min: 0,
         max: 1,
-        splitLine: { lineStyle: { color: isDark ? '#334155' : '#f1f5f9' } },
+        splitLine: { lineStyle: { color: splitColor } },
         axisLabel: { fontSize: 11, color: mutedColor },
       },
       yAxis: {
         type: 'category',
         data: labels.reverse(),
-        axisLine: { lineStyle: { color: isDark ? '#475569' : '#e2e8f0' } },
+        axisLine: { lineStyle: { color: cssVar('--fr-border', '#e2e8f0') } },
         axisLabel: { fontSize: 11, color: mutedColor },
         axisTick: { show: false },
       },
@@ -167,8 +178,8 @@ export default function AudioMonitor({ pipelineAudio }) {
         barHeight: '60%',
         itemStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#3b82f6' },
-            { offset: 1, color: '#60a5fa' },
+            { offset: 0, color: barStart },
+            { offset: 1, color: barEnd },
           ]),
         },
         label: {
@@ -228,7 +239,7 @@ export default function AudioMonitor({ pipelineAudio }) {
     ctx.scale(dpr, dpr)
 
     ctx.clearRect(0, 0, width, height)
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--primary') || '#3b82f6'
+    ctx.fillStyle = cssVar('--fr-chart-primary', '#3b82f6')
     ctx.globalAlpha = 0.6
 
     const step = Math.max(1, Math.floor(float32Array.length / width))
@@ -368,7 +379,7 @@ export default function AudioMonitor({ pipelineAudio }) {
   // 格式化事件显示
   const formatEvent = (event) => {
     const categoryLabel = event.category === 'vocal_distress' ? '人声呼救' : '撞击声'
-    const color = event.category === 'vocal_distress' ? 'var(--orange)' : 'var(--red)'
+    const color = event.category === 'vocal_distress' ? 'var(--fr-state-warning)' : 'var(--fr-state-error)'
     return (
       <span key={`${event.class_index}-${event.timestamp}`} className="event-badge" style={{ background: `${color}20`, color, borderColor: color }}>
         [{categoryLabel}] {event.label} ({event.score.toFixed(2)}) @ {event.timestamp.toFixed(1)}s
@@ -376,22 +387,24 @@ export default function AudioMonitor({ pipelineAudio }) {
     )
   }
 
+  const statusText = {
+    idle: '未连接',
+    ready: '就绪',
+    recording: '录音中...',
+    analyzing: '分析中...',
+    error: '错误',
+  }[statusState]
+
   return (
     <div className="audio-monitor">
       {/* ── 状态栏 ── */}
       <div className="audio-toolbar">
         <div className="audio-status">
           <span className={`audio-status-dot ${statusState}`} data-state={statusState} />
-          <span>{{
-            idle: '未连接',
-            ready: '就绪',
-            recording: '录音中...',
-            analyzing: '分析中...',
-            error: '错误',
-          }[statusState]}</span>
+          <span className="audio-status-text">{statusText}</span>
           {status && (
             <span className="audio-status-detail">
-              {status.model_type} | {status.sample_rate}Hz | {'模型已加载: ' + (status.model_loaded ? '是' : '否')}
+              {status.model_type} | {status.sample_rate}Hz | 模型已加载: {status.model_loaded ? '是' : '否'}
             </span>
           )}
         </div>
@@ -409,20 +422,24 @@ export default function AudioMonitor({ pipelineAudio }) {
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading || recording}
           >
-            {uploading ? '分析中...' : '上传音频文件'}
+            {uploading ? <><Loader size={14} /> 分析中...</> : <><Upload size={14} /> 上传音频文件</>}
           </button>
           <button
             className={`btn ${recording ? 'btn-danger' : 'btn-primary'}`}
             onClick={recording ? stopRecording : startRecording}
             disabled={uploading}
           >
-            {recording ? '■ 停止录音' : '🎤 开始实时监测'}
+            {recording ? <><Square size={14} /> 停止录音</> : <><Mic size={14} /> 开始实时监测</>}
           </button>
         </div>
       </div>
 
-      {micError && <div className="audio-error">{micError}</div>}
-      {error && <div className="audio-error">{error}</div>}
+      {micError && (
+        <div className="audio-error" role="alert"><AlertTriangle size={14} /> {micError}</div>
+      )}
+      {error && (
+        <div className="audio-error" role="alert"><AlertTriangle size={14} /> {error}</div>
+      )}
 
       {/* ── 管线实时音频监测 ── */}
       <div className="pipeline-audio-section">
@@ -436,30 +453,31 @@ export default function AudioMonitor({ pipelineAudio }) {
         </div>
 
         {!pipelineAudio?.enabled && (
-          <div className="audio-empty">
-            <span className="empty-icon">🔇</span>
-            <span>音频监测未启用，请在监控设置中开启音频</span>
+          <div className="empty-state">
+            <VolumeX size={32} />
+            <div className="empty-title">音频监测未启用</div>
+            <div className="empty-hint">请在监控设置中开启音频</div>
           </div>
         )}
 
         {pipelineAudio?.enabled && (
           <div className="pipeline-audio-content">
             <div className="pipeline-audio-meta">
-              <div className="pipeline-audio-source">
+              <div>
                 <span className="meta-label">音频来源</span>
                 <span className="meta-value">{pipelineAudio.source || '未知'}</span>
               </div>
-              <div className="pipeline-audio-chunks">
+              <div>
                 <span className="meta-label">已处理</span>
                 <span className="meta-value">{pipelineAudio.chunksProcessed || 0} 块</span>
               </div>
               {pipelineAudio.lastResult && (
                 <>
-                  <div className="pipeline-audio-duration">
+                  <div>
                     <span className="meta-label">最近分析</span>
                     <span className="meta-value">{pipelineAudio.lastResult.duration_sec?.toFixed(1)}s</span>
                   </div>
-                  <div className="pipeline-audio-time">
+                  <div>
                     <span className="meta-label">耗时</span>
                     <span className="meta-value">{pipelineAudio.lastResult.elapsed_ms?.toFixed(0)}ms</span>
                   </div>
@@ -468,8 +486,8 @@ export default function AudioMonitor({ pipelineAudio }) {
             </div>
 
             {pipelineAudio.error && (
-              <div className="pipeline-audio-error">
-                <span className="error-icon">⚠️</span> {pipelineAudio.error}
+              <div className="pipeline-audio-error" role="alert">
+                <AlertTriangle size={14} /> {pipelineAudio.error}
               </div>
             )}
 
@@ -479,7 +497,7 @@ export default function AudioMonitor({ pipelineAudio }) {
                 <div className="events-list">
                   {pipelineAudio.lastResult.events.map((event, i) => {
                     const catLabel = event.category === 'vocal_distress' ? '人声' : '撞击'
-                    const catColor = event.category === 'vocal_distress' ? 'var(--orange)' : 'var(--red)'
+                    const catColor = event.category === 'vocal_distress' ? 'var(--fr-state-warning)' : 'var(--fr-state-error)'
                     return (
                       <span
                         key={`${event.class_index}-${i}`}
@@ -502,19 +520,17 @@ export default function AudioMonitor({ pipelineAudio }) {
             )}
 
             {!pipelineAudio.lastResult && pipelineAudio.chunksProcessed === 0 && (
-              <div className="audio-empty">
-                <span className="empty-icon">🎧</span>
-                <span>等待音频数据...</span>
+              <div className="empty-state">
+                <AudioLines size={32} />
+                <div className="empty-title">等待音频数据...</div>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* ── 手动分析 / 麦克风 ── */}
-      <div className="audio-toolbar">
-        <h4>手动音频分析</h4>
-      </div>
+      {/* ── 手动分析标题 ── */}
+      <div className="audio-manual-title">手动音频分析</div>
 
       {/* ── 配置面板 ── */}
       <div className="audio-config-panel">
@@ -537,7 +553,7 @@ export default function AudioMonitor({ pipelineAudio }) {
           className="audio-waveform"
           width={800}
           height={120}
-          style={{ width: '100%', height: '120px', background: 'var(--chart-bg)' }}
+          style={{ width: '100%', height: '120px' }}
         />
       </div>
 
@@ -546,8 +562,8 @@ export default function AudioMonitor({ pipelineAudio }) {
         {results && (
           <>
             <div className="results-meta">
-              <div>时长: {results.duration_sec.toFixed(2)}s</div>
-              <div>耗时: {results.elapsed_ms.toFixed(1)}ms</div>
+              <span>时长: {results.duration_sec.toFixed(2)}s</span>
+              <span>耗时: {results.elapsed_ms.toFixed(1)}ms</span>
             </div>
 
             {results.events.length > 0 && (
@@ -568,9 +584,10 @@ export default function AudioMonitor({ pipelineAudio }) {
           </>
         )}
         {!results && !uploading && !liveAnalyzing && (
-          <div className="audio-empty">
-            <span className="empty-icon">🎧</span>
-            <span>上传音频文件或点击「开始实时监测」查看分析结果</span>
+          <div className="empty-state">
+            <AudioLines size={32} />
+            <div className="empty-title">等待分析</div>
+            <div className="empty-hint">上传音频文件或点击「开始实时监测」查看分析结果</div>
           </div>
         )}
       </div>

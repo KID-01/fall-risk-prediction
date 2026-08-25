@@ -1,0 +1,211 @@
+{
+  "schemaVersion": "1.0",
+  "skillProvenance": {
+    "name": "solo-design",
+    "version": "2026.08.06.19.15.08",
+    "version_source": "skill-release-manifest.json",
+    "read_status": "ok"
+  },
+  "project": {
+    "resolvedLane": "redesign_duplicate_project",
+    "deviceType": "desktop",
+    "intentProfile": {
+      "caseFamily": "redesign",
+      "surface": "project",
+      "sourceType": "react-vite-app",
+      "operatingMode": "free-explore",
+      "pageCount": 2,
+      "note": "源项目为 React+Vite 单页应用（无 .design 源文件），重设计以草稿 HTML 项目呈现，原始 React 代码保持不变"
+    },
+    "selectedIntentWorkflowRead": true,
+    "contextRequirementsLoaded": [
+      { "path": "shared-runtime/runtime-boundaries/lane-runtime-contracts.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:00:00.000Z" },
+      { "path": "shared-runtime/agent-dispatch-runtime/lane-dispatch-index.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:00:30.000Z" },
+      { "path": "shared-runtime/agent-dispatch-runtime/shared-page-rendering-kernel.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:01:00.000Z" },
+      { "path": "delivery-quality/page-rendering-quality-gate.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:01:30.000Z" },
+      { "path": "delivery-quality/design-artifact-validation.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:02:00.000Z" },
+      { "path": "delivery-quality/delivery-evidence-contract.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:02:30.000Z" },
+      { "path": "intent-workflows/intent-project-mutation/redesign-project-ui.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:03:00.000Z" },
+      { "path": "intent-workflows/intent-project-mutation/redesign-dispatch-contract.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:03:20.000Z" },
+      { "path": "intent-workflows/intent-project-mutation/redesign-page-runtime.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:03:40.000Z" },
+      { "path": "intent-workflows/intent-project-mutation/orchestration-summary-fields.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:04:00.000Z" },
+      { "path": "shared-runtime/design-artifact-formats/design-project-file-format.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:04:20.000Z" },
+      { "path": "shared-runtime/orchestration-summary-contract/orchestration-summary-contract.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:04:40.000Z" },
+      { "path": "shared-runtime/orchestration-summary-contract/generalized-flow-control-fields.md", "readStatus": "loaded", "bodyRead": true, "recordedAt": "2026-08-25T09:05:00.000Z" }
+    ],
+    "contextReadScope": "redesign_duplicate_project lane full context: lane contracts, dispatch index, shared rendering kernel, quality gates, validation flow, delivery evidence, redesign workflow + dispatch contract + page runtime, mutation summary fields, .design file format, orchestration summary contract, generalized flow control. Source React UI fully read (App.jsx, AudioMonitor.jsx, index.css) for functional inventory.",
+    "readScopeLedger": [
+      { "path": "frontend/src/App.jsx", "purpose": "主看板功能清单与控件枚举" },
+      { "path": "frontend/src/AudioMonitor.jsx", "purpose": "声音监测功能清单与控件枚举" },
+      { "path": "frontend/src/index.css", "purpose": "现有视觉系统与设计约束（适老化高对比）" }
+    ],
+    "dispatchPreflightManifest": [
+      {
+        "nodeId": "page-dashboard",
+        "htmlSrc": "pages/dashboard.html",
+        "laneContract": "redesign_duplicate_project",
+        "packetType": "RedesignPagePacket",
+        "sharedTemplate": "shared-runtime/agent-dispatch-runtime/shared-page-rendering-kernel.md",
+        "supplementaryReads": [
+          { "path": "delivery-quality/page-density-guidelines.md", "reason": "pageType=task-driven 且信息密度高（图表/表单/告警列表）" }
+        ],
+        "allowedWritePaths": ["pages/dashboard.html"],
+        "forbiddenWriteRoots": ["*.design", "runtime-orchestration-summary.json", "validation-report.json", "finish-readiness-report.json"],
+        "toolPolicy": {
+          "todoWriteAllowed": false,
+          "validationScriptsAllowed": false,
+          "previewAllowed": false,
+          "helperScriptsAllowed": false,
+          "designFileWriteAllowed": false,
+          "allowedWritePaths": ["pages/dashboard.html"]
+        }
+      },
+      {
+        "nodeId": "page-audio",
+        "htmlSrc": "pages/audio.html",
+        "laneContract": "redesign_duplicate_project",
+        "packetType": "RedesignPagePacket",
+        "sharedTemplate": "shared-runtime/agent-dispatch-runtime/shared-page-rendering-kernel.md",
+        "supplementaryReads": [
+          { "path": "delivery-quality/page-density-guidelines.md", "reason": "pageType=task-driven 且含配置网格/图表/事件徽章等高密度区块" }
+        ],
+        "allowedWritePaths": ["pages/audio.html"],
+        "forbiddenWriteRoots": ["*.design", "runtime-orchestration-summary.json", "validation-report.json", "finish-readiness-report.json"],
+        "toolPolicy": {
+          "todoWriteAllowed": false,
+          "validationScriptsAllowed": false,
+          "previewAllowed": false,
+          "helperScriptsAllowed": false,
+          "designFileWriteAllowed": false,
+          "allowedWritePaths": ["pages/audio.html"]
+        }
+      }
+    ],
+    "expectedDispatches": [
+      {
+        "nodeId": "page-dashboard",
+        "packetType": "RedesignPagePacket",
+        "status": "completed",
+        "changedFiles": ["pages/dashboard.html"],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "page-dashboard-gen",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        }
+      },
+      {
+        "nodeId": "page-audio",
+        "packetType": "RedesignPagePacket",
+        "status": "completed",
+        "changedFiles": ["pages/audio.html"],
+        "toolCallLedger": {
+          "source": "main-agent-runtime-trace",
+          "traceDigest": "page-audio-gen",
+          "todoWriteCalls": 0,
+          "previewCalls": 0,
+          "validationScriptCalls": 0,
+          "helperScriptWrites": 0
+        }
+      }
+    ],
+    "validationRunDiscipline": {
+      "maxFullValidationRuns": 2,
+      "softWarningsTriggerRepair": false,
+      "blockingRepairMode": "targeted-once",
+      "forbiddenRepairTriggers": ["soft-warning-only", "provenance-warning-only", "style-warning-only"]
+    },
+    "validationHistory": [
+      {
+        "run": 1,
+        "result": "failed",
+        "success": false,
+        "exitCode": 1,
+        "errorCount": 6,
+        "errorClasses": ["dispatch-preflight-or-ownership", "unknown-blocking"],
+        "repairApplied": "expectedDispatches 补齐 status=completed / changedFiles / toolCallLedger",
+        "recordedAt": "2026-08-25T10:20:00.000Z"
+      }
+    ],
+    "validationRepairLedger": [
+      {
+        "run": 1,
+        "trigger": "dispatch-changed-files",
+        "action": "return_to_dispatch_preflight_gate",
+        "repair": "runtime-orchestration-summary.json expectedDispatches 标记 completed 并补齐 changedFiles 与 toolCallLedger（source=main-agent-runtime-trace）",
+        "result": "resolved",
+        "recordedAt": "2026-08-25T10:20:00.000Z"
+      }
+    ],
+    "validationSnapshot": null,
+    "artifactReadinessEvidence": {
+      "status": "ready",
+      "validateDesignWorkspace": "passed (0 errors, 9 non-blocking warnings)",
+      "validateFinishReadiness": "passed (0 errors, 8 non-blocking warnings)",
+      "registeredPages": 2,
+      "interactionsWired": 2,
+      "note": "validate-design-workspace 与 validate-finish-readiness 均已通过，交付就绪",
+      "recordedAt": "2026-08-25T10:30:00.000Z"
+    },
+    "lowValueCallWatchdog": {
+      "applies": true,
+      "noProgressSignals": ["no_tool_call", "no_artifact_diff", "no_structured_decision"],
+      "noProgressNextAction": "enter_readiness_or_blocked_summary",
+      "recordedAt": "2026-08-25T09:05:30.000Z"
+    },
+    "visualQualityCheckpoints": [
+      { "checkpointId": "vq-anchor", "dimension": "visual-anchor", "expected": "视频画面区作为监控主锚点，风险卡片作为状态主锚点", "evidenceTarget": "pages/dashboard.html#video-panel" },
+      { "checkpointId": "vq-hierarchy", "dimension": "information-hierarchy", "expected": "顶栏→控制区→视频→风险→图表→告警的清晰优先级", "evidenceTarget": "pages/dashboard.html#content" },
+      { "checkpointId": "vq-structure", "dimension": "composition-structure", "expected": "医疗监护级密度：控件分组、网格对齐、留白平衡", "evidenceTarget": "pages/dashboard.html#layout" },
+      { "checkpointId": "vq-implementation", "dimension": "implementation-strategy", "expected": "Chart.js + 静态 critical-layout CSS + Lucide 图标，视频帧用 CSS 降级模拟", "evidenceTarget": "pages/dashboard.html#implementation" }
+    ],
+    "duplicateProjectPath": "e:/fengxian/fall-risk-prediction/frontend/fall-risk-dashboard-draft",
+    "redesignAudit": {
+      "primaryIssue": "flat hierarchy: 所有区块同等视觉权重，风险状态与视频画面缺少优先级，控件散布缺乏分组",
+      "fixPriority": ["surface-layering", "spacing-rhythm", "typography", "interaction"],
+      "preserve": ["全部业务文案", "全部功能控件（按钮/下拉/输入框/开关）", "四档风险等级语义与颜色", "主题切换", "实时连接状态"],
+      "change": ["顶栏改为固定系统栏并加入品牌标识", "控制区重组为分组表单（模式/输入/操作三级）", "视频区强化画幅、状态徽标与 tab 条", "风险卡片改为渐变强调层+脉搏动效", "图表卡片统一数据可视化语言", "声音监测升级为独立页并保留完整功能"],
+      "risk": "不丢失任何原有功能键；不改动 React 源项目；domIds 仅新增 tab-audio 与 back-dashboard"
+    },
+    "sourceProjectLaneHeritage": {
+      "sourceProjectType": "react-vite-app",
+      "inheritedConstraints": [],
+      "note": "源项目为 React+Vite 应用而非 .design 项目，无 Library/restore 继承约束"
+    }
+  },
+  "designSource": {
+    "operatingMode": "free-explore",
+    "libraryIdentity": null,
+    "iconSource": "lucide",
+    "chartRuntime": "chart.js-via-head-charts-flag",
+    "imageGenerationAvailable": false,
+    "imagePlan": "degraded-css: 视频帧/图表以 CSS 渐变、canvas 与 Chart.js 模拟，不使用位图素材（环境无图片生成能力，已按 Gate 5 记录降级计划）",
+    "tokenReference": {
+      "cssFile": "colors_and_type-draft.css",
+      "brandPrefix": "fr",
+      "semanticTokens": ["--fr-background", "--fr-foreground", "--fr-card", "--fr-primary", "--fr-border", "--fr-muted", "--fr-radius-sm/md/lg", "--fr-state-success/warning/error/info", "--fr-risk-low/attention/warning/critical"]
+    }
+  },
+  "pages": [
+    {
+      "nodeId": "page-dashboard",
+      "title": "监测看板",
+      "htmlSrc": "pages/dashboard.html",
+      "pageType": "task-driven",
+      "visualNorthStar": "医疗监护级监控台：高对比、一眼判断风险、控件分组清晰、视频画面为主锚点",
+      "qualityRisks": ["信息密度高（控制区+视频+图表+告警）", "需保留全部原有功能键", "双主题（light/dark）"],
+      "interactionWiring": [{ "domId": "tab-audio", "targetPageId": "page-audio", "hideEdge": true, "transitionLabel": "声音监测" }]
+    },
+    {
+      "nodeId": "page-audio",
+      "title": "声音监测",
+      "htmlSrc": "pages/audio.html",
+      "pageType": "task-driven",
+      "visualNorthStar": "完整的声音监测工作台：状态、操作、管线监测、配置、波形、结果分层排布",
+      "qualityRisks": ["功能控件多（上传/录音/状态/配置/图表）", "需保留全部原有功能键", "双主题（light/dark）"],
+      "interactionWiring": [{ "domId": "back-dashboard", "targetPageId": "page-dashboard", "hideEdge": true, "transitionLabel": "返回看板" }]
+    }
+  ]
+}

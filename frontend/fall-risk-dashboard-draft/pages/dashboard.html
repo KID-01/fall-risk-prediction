@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>监测看板</title>
+    <style id="theme-vars">
+/* ============================================================
+   跌倒风险预测系统 — 草稿重设计版
+   设计方向：医疗监护级看板 · 高对比 · 一眼判断 · 平静可信
+   Token 前缀：fr（fall-risk）
+   浅色/深色双主题，通过 <html class="light|dark"> 切换
+   ============================================================ */
+
+/* ── 亮色主题 Token ── */
+:root {
+  /* 语义色（apply-html-head-contract 必需映射） */
+  --fr-background: #eef2f7;
+  --fr-foreground: #0f172a;
+  --fr-card: #ffffff;
+  --fr-card-foreground: #0f172a;
+  --fr-primary: #1d4ed8;
+  --fr-primary-hover: #1e40af;
+  --fr-primary-foreground: #ffffff;
+  --fr-primary-soft: #e8effc;
+  --fr-border: #d8e0ec;
+  --fr-muted: #f1f4f9;
+  --fr-muted-foreground: #64748b;
+
+  /* 表层与输入 */
+  --fr-surface: #f7f9fc;
+  --fr-input: #ffffff;
+  --fr-input-border: #cbd5e1;
+  --fr-ring: rgba(29, 78, 216, 0.28);
+  --fr-focus-ring: rgba(29, 78, 216, 0.16);
+
+  /* 圆角 */
+  --fr-radius-sm: 6px;
+  --fr-radius-md: 8px;
+  --fr-radius-lg: 12px;
+  --fr-radius-xl: 16px;
+
+  /* 阴影（静态表面极轻，仅悬浮层级加深） */
+  --fr-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --fr-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --fr-shadow-lg: 0 8px 20px rgba(15, 23, 42, 0.05);
+
+  /* 状态色（仅用于真实状态/风险/破坏性操作） */
+  --fr-state-success: #15803d;
+  --fr-state-warning: #b45309;
+  --fr-state-error: #b91c1c;
+  --fr-state-info: #0369a1;
+  --fr-success-soft: #ecfdf3;
+  --fr-warning-soft: #fff8e6;
+  --fr-error-soft: #fef0f0;
+  --fr-info-soft: #eaf4fb;
+
+  /* 四级风险 */
+  --fr-risk-low: #15803d;
+  --fr-risk-attention: #a16207;
+  --fr-risk-warning: #c2410c;
+  --fr-risk-critical: #b91c1c;
+  --fr-risk-low-soft: #ecfdf3;
+  --fr-risk-attention-soft: #fdf6e3;
+  --fr-risk-warning-soft: #fff1e7;
+  --fr-risk-critical-soft: #fef0f0;
+
+  /* 图表（数据可视化身份色，Chart.js 运行时读取） */
+  --fr-chart-grid: #e4eaf2;
+  --fr-chart-text: #475569;
+  --fr-chart-primary: #1d4ed8;
+  --fr-chart-low: #15803d;
+  --fr-chart-attention: #a16207;
+  --fr-chart-warning: #c2410c;
+  --fr-chart-critical: #b91c1c;
+
+  /* 视频占位与告警 */
+  --fr-video-bg: #0b1220;
+  --fr-error-banner-bg: rgba(185, 28, 28, 0.08);
+  --fr-error-banner-border: rgba(185, 28, 28, 0.28);
+
+  /* 字体 */
+  --fr-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --fr-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* 动效 */
+  --fr-transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── 暗色主题 Token ── */
+html.dark {
+  --fr-background: #0b1220;
+  --fr-foreground: #e7edf7;
+  --fr-card: #131c2e;
+  --fr-card-foreground: #e7edf7;
+  --fr-primary: #6d9bff;
+  --fr-primary-hover: #8ab2ff;
+  --fr-primary-foreground: #0b1220;
+  --fr-primary-soft: #1c2b4a;
+  --fr-border: #243349;
+  --fr-muted: #182438;
+  --fr-muted-foreground: #8ea0ba;
+
+  --fr-surface: #101a2b;
+  --fr-input: #182438;
+  --fr-input-border: #33445e;
+  --fr-ring: rgba(109, 155, 255, 0.35);
+  --fr-focus-ring: rgba(109, 155, 255, 0.2);
+
+  --fr-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --fr-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.26);
+  --fr-shadow-lg: 0 8px 20px rgba(0, 0, 0, 0.38);
+
+  --fr-state-success: #4ade80;
+  --fr-state-warning: #fbbf24;
+  --fr-state-error: #f87171;
+  --fr-state-info: #38bdf8;
+  --fr-success-soft: rgba(34, 197, 94, 0.14);
+  --fr-warning-soft: rgba(245, 158, 11, 0.14);
+  --fr-error-soft: rgba(239, 68, 68, 0.14);
+  --fr-info-soft: rgba(14, 165, 233, 0.14);
+
+  --fr-risk-low: #4ade80;
+  --fr-risk-attention: #fbbf24;
+  --fr-risk-warning: #fb923c;
+  --fr-risk-critical: #f87171;
+  --fr-risk-low-soft: rgba(34, 197, 94, 0.12);
+  --fr-risk-attention-soft: rgba(245, 158, 11, 0.12);
+  --fr-risk-warning-soft: rgba(249, 115, 22, 0.12);
+  --fr-risk-critical-soft: rgba(239, 68, 68, 0.12);
+
+  --fr-chart-grid: #243349;
+  --fr-chart-text: #8ea0ba;
+  --fr-chart-primary: #6d9bff;
+  --fr-chart-low: #4ade80;
+  --fr-chart-attention: #fbbf24;
+  --fr-chart-warning: #fb923c;
+  --fr-chart-critical: #f87171;
+
+  --fr-error-banner-bg: rgba(239, 68, 68, 0.1);
+  --fr-error-banner-border: rgba(239, 68, 68, 0.32);
+}
+
+/* ── 基础重置 ── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--fr-font-sans);
+  background: var(--fr-background);
+  color: var(--fr-foreground);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--fr-transition), color var(--fr-transition);
+}
+
+button, input, select { font-family: inherit; }
+
+/* ============================================================
+   组件层（两页共享，保证延续性锚点）
+   ============================================================ */
+
+/* ── 按钮 ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 1px solid transparent;
+  border-radius: var(--fr-radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--fr-transition), border-color var(--fr-transition), color var(--fr-transition), box-shadow var(--fr-transition), transform 0.1s ease;
+}
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn:focus-visible { outline: 2px solid var(--fr-primary); outline-offset: 2px; }
+
+.btn-primary { background: var(--fr-primary); color: var(--fr-primary-foreground); }
+.btn-primary:hover:not(:disabled) { background: var(--fr-primary-hover); }
+
+.btn-danger { background: var(--fr-state-error); color: #ffffff; }
+html.dark .btn-danger { background: #dc2626; }
+.btn-danger:hover:not(:disabled) { background: #b91c1c; }
+html.dark .btn-danger:hover:not(:disabled) { background: #ef4444; }
+
+.btn-secondary {
+  background: var(--fr-card);
+  color: var(--fr-muted-foreground);
+  border-color: var(--fr-border);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--fr-muted); color: var(--fr-foreground); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--fr-muted-foreground);
+  border-color: transparent;
+}
+.btn-ghost:hover:not(:disabled) { background: var(--fr-muted); color: var(--fr-foreground); }
+
+.btn-lg { padding: 13px 28px; font-size: 15px; border-radius: var(--fr-radius-md); }
+.btn-icon {
+  width: 38px; height: 38px; padding: 0;
+  border-radius: var(--fr-radius-md);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ── 表单控件 ── */
+.input, .select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--fr-input-border);
+  border-radius: var(--fr-radius-md);
+  background: var(--fr-input);
+  color: var(--fr-foreground);
+  font-size: 14px;
+  transition: border-color var(--fr-transition), box-shadow var(--fr-transition);
+  outline: none;
+}
+.input::placeholder { color: var(--fr-muted-foreground); }
+.input:focus, .select:focus {
+  border-color: var(--fr-primary);
+  box-shadow: 0 0 0 3px var(--fr-focus-ring);
+}
+.select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--fr-muted-foreground) 50%), linear-gradient(135deg, var(--fr-muted-foreground) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 55%, calc(100% - 13px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 34px;
+  cursor: pointer;
+}
+.select:disabled, .input:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--fr-muted-foreground);
+  margin-bottom: 6px;
+}
+
+/* ── 卡片 ── */
+.card {
+  background: var(--fr-card);
+  border: 1px solid var(--fr-border);
+  border-radius: var(--fr-radius-lg);
+  box-shadow: var(--fr-shadow);
+}
+
+/* ── 分段控件（模式/标签页） ── */
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--fr-muted);
+  border: 1px solid var(--fr-border);
+  border-radius: var(--fr-radius-md);
+}
+.seg button {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fr-muted-foreground);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--fr-transition), color var(--fr-transition), box-shadow var(--fr-transition);
+}
+.seg button.active { background: var(--fr-card); color: var(--fr-foreground); box-shadow: var(--fr-shadow-sm); }
+.seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+.seg button:focus-visible { outline: 2px solid var(--fr-primary); outline-offset: 1px; }
+
+/* ── 徽标 ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.badge-low { background: var(--fr-risk-low-soft); color: var(--fr-risk-low); }
+.badge-attention { background: var(--fr-risk-attention-soft); color: var(--fr-risk-attention); }
+.badge-warning { background: var(--fr-risk-warning-soft); color: var(--fr-risk-warning); }
+.badge-critical { background: var(--fr-risk-critical-soft); color: var(--fr-risk-critical); }
+.badge-neutral { background: var(--fr-muted); color: var(--fr-muted-foreground); }
+.badge-live { background: var(--fr-success-soft); color: var(--fr-state-success); }
+
+/* ── 状态圆点 ── */
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--fr-muted-foreground);
+  flex-shrink: 0;
+}
+.status-dot.online { background: var(--fr-state-success); box-shadow: 0 0 0 3px var(--fr-success-soft); }
+.status-dot.offline { background: var(--fr-muted-foreground); }
+.status-dot.recording { background: var(--fr-state-error); box-shadow: 0 0 0 3px var(--fr-error-soft); animation: fr-pulse 1.4s infinite; }
+.status-dot.analyzing { background: var(--fr-state-warning); box-shadow: 0 0 0 3px var(--fr-warning-soft); }
+.status-dot.ready { background: var(--fr-state-success); box-shadow: 0 0 0 3px var(--fr-success-soft); }
+
+/* ── 区块标题（左侧强调条） ── */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fr-foreground);
+}
+.section-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--fr-primary);
+  flex-shrink: 0;
+}
+.section-title.title-danger::before { background: var(--fr-state-error); }
+.section-title.title-success::before { background: var(--fr-state-success); }
+
+/* ── 数值/等宽 ── */
+.mono { font-family: var(--fr-font-mono); font-variant-numeric: tabular-nums; }
+
+/* ── 空态 ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 20px;
+  color: var(--fr-muted-foreground);
+  font-size: 14px;
+  text-align: center;
+}
+.empty-state .empty-title { font-weight: 600; color: var(--fr-muted-foreground); }
+.empty-state .empty-hint { font-size: 13px; opacity: 0.85; }
+
+/* ── 错误横幅 ── */
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--fr-error-banner-bg);
+  border: 1px solid var(--fr-error-banner-border);
+  border-radius: var(--fr-radius-md);
+  color: var(--fr-state-error);
+  font-size: 13px;
+}
+
+/* ── 事件徽章 ── */
+.event-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--fr-border);
+  background: var(--fr-muted);
+  color: var(--fr-muted-foreground);
+  white-space: nowrap;
+}
+.event-badge.voice { background: var(--fr-warning-soft); color: var(--fr-state-warning); border-color: rgba(180, 83, 9, 0.3); }
+html.dark .event-badge.voice { border-color: rgba(251, 191, 36, 0.3); }
+.event-badge.impact { background: var(--fr-error-soft); color: var(--fr-state-error); border-color: rgba(185, 28, 28, 0.3); }
+html.dark .event-badge.impact { border-color: rgba(248, 113, 113, 0.3); }
+
+/* ── 页脚 ── */
+.app-footer {
+  margin-top: 40px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--fr-border);
+  color: var(--fr-muted-foreground);
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── 动画 ── */
+@keyframes fr-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.15); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--fr-background);
+    --color-foreground: var(--fr-foreground);
+    --color-card: var(--fr-card);
+    --color-card-foreground: var(--fr-card-foreground);
+    --color-primary: var(--fr-primary);
+    --color-primary-foreground: var(--fr-primary-foreground);
+    --color-muted: var(--fr-muted);
+    --color-muted-foreground: var(--fr-muted-foreground);
+    --color-border: var(--fr-border);
+    --color-input: var(--fr-input);
+    --color-ring: var(--fr-ring);
+    --radius-sm: var(--fr-radius-sm);
+    --radius-md: var(--fr-radius-md);
+    --radius-lg: var(--fr-radius-lg);
+    --radius-xl: var(--fr-radius-xl);
+  }
+  @layer base {
+    body { background: var(--fr-background); color: var(--fr-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--fr-background); }
+      .text-background { color: var(--fr-background); }
+      .border-background { border-color: var(--fr-background); }
+      .ring-background { --tw-ring-color: var(--fr-background); }
+      .bg-foreground { background-color: var(--fr-foreground); }
+      .text-foreground { color: var(--fr-foreground); }
+      .border-foreground { border-color: var(--fr-foreground); }
+      .ring-foreground { --tw-ring-color: var(--fr-foreground); }
+      .bg-card { background-color: var(--fr-card); }
+      .text-card { color: var(--fr-card); }
+      .border-card { border-color: var(--fr-card); }
+      .ring-card { --tw-ring-color: var(--fr-card); }
+      .bg-card-foreground { background-color: var(--fr-card-foreground); }
+      .text-card-foreground { color: var(--fr-card-foreground); }
+      .border-card-foreground { border-color: var(--fr-card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--fr-card-foreground); }
+      .bg-primary { background-color: var(--fr-primary); }
+      .text-primary { color: var(--fr-primary); }
+      .border-primary { border-color: var(--fr-primary); }
+      .ring-primary { --tw-ring-color: var(--fr-primary); }
+      .bg-primary-foreground { background-color: var(--fr-primary-foreground); }
+      .text-primary-foreground { color: var(--fr-primary-foreground); }
+      .border-primary-foreground { border-color: var(--fr-primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--fr-primary-foreground); }
+      .bg-muted { background-color: var(--fr-muted); }
+      .text-muted { color: var(--fr-muted); }
+      .border-muted { border-color: var(--fr-muted); }
+      .ring-muted { --tw-ring-color: var(--fr-muted); }
+      .bg-muted-foreground { background-color: var(--fr-muted-foreground); }
+      .text-muted-foreground { color: var(--fr-muted-foreground); }
+      .border-muted-foreground { border-color: var(--fr-muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--fr-muted-foreground); }
+      .bg-border { background-color: var(--fr-border); }
+      .text-border { color: var(--fr-border); }
+      .border-border { border-color: var(--fr-border); }
+      .ring-border { --tw-ring-color: var(--fr-border); }
+      .bg-input { background-color: var(--fr-input); }
+      .text-input { color: var(--fr-input); }
+      .border-input { border-color: var(--fr-input); }
+      .ring-input { --tw-ring-color: var(--fr-input); }
+      .bg-ring { background-color: var(--fr-ring); }
+      .text-ring { color: var(--fr-ring); }
+      .border-ring { border-color: var(--fr-ring); }
+      .ring-ring { --tw-ring-color: var(--fr-ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+    <main>
+      <div class="page-shell">
+
+        <!-- 顶部系统栏 -->
+        <header class="topbar">
+          <div class="topbar-brand">
+            <span class="topbar-brand-icon"><i data-lucide="shield"></i></span>
+            <div>
+              <div class="topbar-title">跌倒风险预测系统</div>
+              <div class="topbar-sub">基于多模态 AI 监测 · 家属端实时看板</div>
+            </div>
+          </div>
+          <div class="topbar-right">
+            <button type="button" class="btn btn-ghost btn-icon" id="theme-toggle" data-dom-id="theme-toggle" title="切换主题" aria-label="切换主题">
+              <i data-lucide="moon"></i>
+            </button>
+            <span class="badge badge-live" id="conn-badge"><span class="status-dot online"></span><span id="conn-text">实时连接</span></span>
+          </div>
+        </header>
+
+        <!-- 监控控制区 -->
+        <section class="card controls-card section-block" aria-label="监控控制">
+          <div class="card-head">
+            <h2 class="section-title">监控设置</h2>
+            <span class="badge badge-live" id="run-badge"><span class="status-dot online"></span>监控中</span>
+          </div>
+
+          <div class="seg" role="group" aria-label="视频源模式">
+            <button type="button" class="active" id="mode-ezviz" data-dom-id="mode-ezviz">萤石设备</button>
+            <button type="button" id="mode-manual" data-dom-id="mode-manual">手工地址</button>
+          </div>
+
+          <div class="form-grid" id="ezviz-fields">
+            <div class="field-group">
+              <label class="field-label" for="device-select">萤石设备</label>
+              <select id="device-select" class="select" aria-label="萤石设备">
+                <option value="">请选择设备</option>
+                <option value="D12287001" selected>客厅摄像头（D122****，在线）</option>
+                <option value="D12287002">卧室摄像头（D122****，在线）</option>
+                <option value="D12287003">门口摄像头（D122****，离线）</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="channel-select">设备通道</label>
+              <select id="channel-select" class="select" aria-label="设备通道">
+                <option value="1" selected>通道 1</option>
+                <option value="2">通道 2</option>
+              </select>
+            </div>
+            <div class="field-group field-action">
+              <label class="field-label">&nbsp;</label>
+              <button type="button" class="btn btn-secondary" id="refresh-devices" data-dom-id="refresh-devices">
+                <i data-lucide="refresh-cw"></i> 刷新设备
+              </button>
+            </div>
+          </div>
+
+          <div class="form-grid" id="manual-fields" hidden>
+            <div class="field-group field-wide">
+              <label class="field-label" for="source-url">视频源地址</label>
+              <input id="source-url" class="input" type="text" placeholder="本地文件、RTMP 或 RTSP 视频源地址">
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="field-group">
+              <label class="field-label" for="person-id">被监测人 ID</label>
+              <input id="person-id" class="input" type="text" placeholder="被监测人 ID" value="default">
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="audio-source">音频源</label>
+              <select id="audio-source" class="select" aria-label="音频源">
+                <option value="auto" selected>音频: 自动(跟随视频源)</option>
+                <option value="off">音频: 关闭</option>
+                <option value="mic">音频: 麦克风</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="control-buttons">
+            <button type="button" class="btn btn-primary" id="btn-start" data-dom-id="btn-start">
+              <i data-lucide="play"></i> 启动监控
+            </button>
+            <button type="button" class="btn btn-danger" id="btn-stop" data-dom-id="btn-stop">
+              <i data-lucide="square"></i> 停止监控
+            </button>
+            <button type="button" class="btn btn-secondary" id="btn-reset" data-dom-id="btn-reset">
+              <i data-lucide="rotate-ccw"></i> 重置基线
+            </button>
+          </div>
+
+          <div class="error-banner control-error" id="control-error" hidden>
+            <i data-lucide="alert-triangle"></i>
+            <span>无法连接后端服务，请确认 FastAPI 已启动。</span>
+          </div>
+        </section>
+
+        <!-- 实时画面 -->
+        <section class="card video-panel section-block" aria-label="实时画面">
+          <div class="card-head">
+            <h2 class="section-title">实时画面</h2>
+            <div class="video-head-right">
+              <div class="seg" role="tablist" aria-label="视频画面">
+                <button type="button" role="tab" aria-selected="true" class="active" data-tab="analysis" id="tab-analysis">AI 分析画面</button>
+                <button type="button" role="tab" aria-selected="false" data-tab="raw" id="tab-raw">萤石原始画面</button>
+                <a href="audio.html" role="tab" aria-selected="false" class="tab-link" id="tab-audio" data-dom-id="tab-audio">声音监测</a>
+              </div>
+              <span class="badge badge-live" id="video-badge"><span class="status-dot online"></span><span class="badge-text">监控中</span></span>
+            </div>
+          </div>
+
+          <div class="video-frame" id="frame-analysis">
+            <div class="video-grid-overlay"></div>
+            <div class="video-label">AI 分析画面</div>
+            <div class="video-rec"><span class="rec-dot"></span> REC 14:32:08</div>
+            <div class="video-center">
+              <i data-lucide="monitor-play"></i>
+              <span>实时行为分析 · 人体骨架关键点监测中</span>
+            </div>
+          </div>
+
+          <div class="video-frame video-frame-raw" id="frame-raw" hidden>
+            <div class="video-grid-overlay"></div>
+            <div class="video-label">萤石原始画面</div>
+            <div class="video-center">
+              <i data-lucide="video"></i>
+              <span>选择在线设备并启动监控后显示原始画面</span>
+            </div>
+          </div>
+
+          <div class="video-actions">
+            <button type="button" class="btn btn-secondary" id="btn-player" data-dom-id="btn-player">
+              <i data-lucide="refresh-cw"></i> 刷新播放授权
+            </button>
+          </div>
+        </section>
+
+        <!-- 风险等级大卡片 -->
+        <section class="risk-hero section-block" aria-label="当前风险状态">
+          <div class="risk-hero-main">
+            <div class="risk-level">
+              <span class="risk-dot"></span>
+              <span class="risk-level-label" id="risk-level-label">低风险</span>
+            </div>
+            <div class="risk-message" id="risk-message">系统运行正常，持续监测中</div>
+          </div>
+          <div class="risk-meta">
+            <div class="meta-item">
+              <div class="meta-value mono" id="meta-baseline">62/100</div>
+              <div class="meta-label">基线采集</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-value mono" id="meta-frames">18420</div>
+              <div class="meta-label">处理帧数</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-value mono" id="meta-valid">17205</div>
+              <div class="meta-label">有效帧数</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-value mono" id="meta-audio">38</div>
+              <div class="meta-label">音频块数</div>
+            </div>
+          </div>
+          <div class="error-banner audio-error-banner" id="audio-error" hidden>
+            <i data-lucide="alert-triangle"></i>
+            <span>音频异常: 音频设备数据流中断，请检查麦克风权限。</span>
+          </div>
+        </section>
+
+        <!-- 图表网格 -->
+        <div class="chart-grid section-block">
+          <section class="card chart-card" aria-label="当前风险评分">
+            <div class="card-head">
+              <h2 class="section-title">当前风险评分</h2>
+            </div>
+            <div class="chart-box chart-gauge">
+              <div id="gauge-chart" class="gauge-inner"></div>
+            </div>
+          </section>
+          <section class="card chart-card" aria-label="近24小时风险趋势">
+            <div class="card-head">
+              <h2 class="section-title">近24小时风险趋势</h2>
+            </div>
+            <div class="chart-box">
+              <canvas id="trend-chart"></canvas>
+            </div>
+            <div class="empty-state chart-empty" id="trend-empty" hidden>
+              <i data-lucide="chart-line"></i>
+              <div class="empty-title">暂无历史数据</div>
+              <div class="empty-hint">启动监控后数据将在此展示</div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 告警列表 -->
+        <section class="card alert-card section-block" aria-label="最新告警">
+          <div class="card-head">
+            <h2 class="section-title">最新告警</h2>
+            <span class="badge badge-neutral">近 24 小时</span>
+          </div>
+          <div class="alert-list" id="alert-list">
+            <div class="alert-item">
+              <span class="badge badge-attention">关注级</span>
+              <span class="alert-message">检测到长时间停留，起身活动减少</span>
+              <span class="alert-time mono">2026/8/25 14:12:06</span>
+            </div>
+            <div class="alert-item">
+              <span class="badge badge-warning">预警级</span>
+              <span class="alert-message">夜间频繁起夜，步态稳定性下降</span>
+              <span class="alert-time mono">2026/8/25 03:47:22</span>
+            </div>
+            <div class="alert-item">
+              <span class="badge badge-low">低风险</span>
+              <span class="alert-message">基线校准完成，监测恢复正常</span>
+              <span class="alert-time mono">2026/8/24 21:05:41</span>
+            </div>
+            <div class="alert-item">
+              <span class="badge badge-neutral">系统</span>
+              <span class="alert-message">视频流重连成功，监控继续运行</span>
+              <span class="alert-time mono">2026/8/24 19:33:58</span>
+            </div>
+          </div>
+          <div class="empty-state" id="alert-empty" hidden>
+            <i data-lucide="bell"></i>
+            <div class="empty-title">暂无告警记录</div>
+          </div>
+        </section>
+
+        <!-- 页脚 -->
+        <footer class="app-footer">
+          <span>跌倒风险预测系统 · 重设计草稿</span>
+          <span>多模态 AI 监测</span>
+        </footer>
+
+      </div>
+    </main>
+
+    <style id="critical-layout">
+      .page-shell { max-width: 1180px; margin: 0 auto; padding: 24px 28px 48px; }
+      .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 0 20px; flex-wrap: wrap; }
+      .topbar-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+      .topbar-right { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+      .topbar-brand-icon { width: 38px; height: 38px; flex-shrink: 0; border-radius: var(--fr-radius-md); background: var(--fr-primary-soft); color: var(--fr-primary); display: inline-flex; align-items: center; justify-content: center; }
+      .topbar-title { font-size: 17px; font-weight: 700; line-height: 1.3; color: var(--fr-foreground); }
+      .topbar-sub { font-size: 12px; color: var(--fr-muted-foreground); }
+      .btn svg, .badge svg, .event-badge svg, .error-banner svg, .empty-state svg, .topbar-brand-icon svg, .video-center svg { width: 16px; height: 16px; }
+      .section-block { margin-top: 24px; }
+      .controls-card { padding: 20px; }
+      .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+      .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+      .field-group { display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; min-width: 0; }
+      .field-wide { grid-column: 1 / -1; }
+      .control-buttons { display: flex; align-items: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+      .control-error { margin-top: 14px; }
+      .video-panel { padding: 20px; }
+      .video-head-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      .seg a.tab-link {
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 8px 14px; border: 0; border-radius: 6px;
+        background: transparent; color: var(--fr-muted-foreground);
+        font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none;
+        transition: background var(--fr-transition), color var(--fr-transition), box-shadow var(--fr-transition);
+      }
+      .seg a.tab-link.active { background: var(--fr-card); color: var(--fr-foreground); box-shadow: var(--fr-shadow-sm); }
+      .video-frame {
+        position: relative; aspect-ratio: 16 / 9; width: 100%;
+        border-radius: var(--fr-radius-md); overflow: hidden;
+        background: linear-gradient(135deg, var(--fr-video-bg) 0%, color-mix(in srgb, var(--fr-video-bg) 78%, var(--fr-primary)) 130%);
+        border: 1px solid var(--fr-border);
+      }
+      .video-frame-raw { background: var(--fr-video-bg); }
+      .video-grid-overlay {
+        position: absolute; inset: 0;
+        background:
+          repeating-linear-gradient(0deg, color-mix(in srgb, var(--fr-border) 16%, transparent) 0 1px, transparent 1px 44px),
+          repeating-linear-gradient(90deg, color-mix(in srgb, var(--fr-border) 16%, transparent) 0 1px, transparent 1px 44px);
+      }
+      .video-label {
+        position: absolute; top: 12px; left: 12px;
+        font-size: 12px; font-weight: 600; color: var(--fr-muted-foreground);
+        background: color-mix(in srgb, var(--fr-video-bg) 72%, transparent);
+        border: 1px solid color-mix(in srgb, var(--fr-border) 45%, transparent);
+        padding: 4px 10px; border-radius: 999px;
+      }
+      .video-rec {
+        position: absolute; top: 12px; right: 12px;
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+        color: var(--fr-muted-foreground);
+        background: color-mix(in srgb, var(--fr-video-bg) 72%, transparent);
+        border: 1px solid color-mix(in srgb, var(--fr-border) 45%, transparent);
+        padding: 4px 10px; border-radius: 999px;
+      }
+      .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fr-state-error); animation: fr-pulse 1.4s infinite; flex-shrink: 0; }
+      .video-center {
+        position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+        color: var(--fr-muted-foreground); font-size: 14px; text-align: center; padding: 20px;
+      }
+      .video-center svg { width: 30px; height: 30px; opacity: 0.9; }
+      .video-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+      .risk-hero {
+        border-radius: var(--fr-radius-lg);
+        border: 1px solid var(--fr-border);
+        border-left: 4px solid var(--fr-risk-low);
+        background: linear-gradient(135deg, var(--fr-risk-low-soft) 0%, var(--fr-card) 55%);
+        padding: 22px 24px;
+      }
+      .risk-hero-main { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+      .risk-level { display: inline-flex; align-items: center; gap: 10px; }
+      .risk-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--fr-risk-low); box-shadow: 0 0 0 4px var(--fr-risk-low-soft); flex-shrink: 0; }
+      .risk-level-label { font-size: 24px; font-weight: 800; color: var(--fr-risk-low); letter-spacing: 0.02em; }
+      .risk-message { font-size: 15px; color: var(--fr-foreground); }
+      .risk-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px; }
+      .meta-item { display: flex; flex-direction: column; gap: 2px; padding-top: 12px; border-top: 1px solid var(--fr-border); }
+      .meta-value { font-size: 20px; font-weight: 700; color: var(--fr-foreground); }
+      .meta-label { font-size: 12px; color: var(--fr-muted-foreground); }
+      .audio-error-banner { margin-top: 14px; }
+      .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+      .chart-card { padding: 20px; }
+      .chart-box { position: relative; height: 240px; }
+      .chart-gauge { position: relative; height: 240px; }
+      .gauge-inner { width: 100%; height: 100%; }
+      .chart-empty { padding: 24px 20px; }
+      .alert-card { padding: 20px; }
+      .alert-list { display: flex; flex-direction: column; }
+      .alert-item {
+        display: flex; align-items: center; gap: 14px;
+        padding: 12px 4px; border-bottom: 1px solid var(--fr-border);
+        min-width: 0;
+      }
+      .alert-item:last-child { border-bottom: 0; }
+      .alert-message { flex: 1 1 auto; font-size: 14px; color: var(--fr-foreground); min-width: 0; }
+      .alert-time { flex: 0 0 auto; font-size: 12px; color: var(--fr-muted-foreground); }
+      @media (max-width: 960px) {
+        .form-grid { grid-template-columns: 1fr 1fr; }
+        .chart-grid { grid-template-columns: 1fr; }
+        .risk-meta { grid-template-columns: repeat(2, 1fr); }
+      }
+      @media (max-width: 640px) {
+        .form-grid { grid-template-columns: 1fr; }
+        .risk-meta { grid-template-columns: 1fr 1fr; }
+        .alert-item { flex-wrap: wrap; gap: 8px; }
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+
+    <script>
+      (function () {
+        var root = document.documentElement;
+
+        var cssVar = function (name, fb) {
+          var v = getComputedStyle(root).getPropertyValue(name).trim();
+          return v || fb;
+        };
+
+        var chartInstances = [];
+        function destroyCharts() {
+          chartInstances.forEach(function (c) {
+            if (c && typeof c.dispose === 'function') c.dispose();
+            else if (c && typeof c.destroy === 'function') c.destroy();
+          });
+          chartInstances = [];
+        }
+
+        function hexToRgba(hex, alpha) {
+          var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
+          if (!m) return hex;
+          return 'rgba(' + parseInt(m[1], 16) + ',' + parseInt(m[2], 16) + ',' + parseInt(m[3], 16) + ',' + alpha + ')';
+        }
+
+        /* 主题切换 */
+        var themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+          themeToggle.addEventListener('click', function () {
+            root.classList.toggle('dark');
+            var icon = themeToggle.querySelector('[data-lucide]');
+            icon.setAttribute('data-lucide', root.classList.contains('dark') ? 'sun' : 'moon');
+            lucide.createIcons();
+            rebuildCharts();
+          });
+        }
+
+        /* 视频源模式切换 */
+        var modeEzviz = document.getElementById('mode-ezviz');
+        var modeManual = document.getElementById('mode-manual');
+        var ezvizFields = document.getElementById('ezviz-fields');
+        var manualFields = document.getElementById('manual-fields');
+        function setMode(mode) {
+          var isEzviz = mode === 'ezviz';
+          modeEzviz.classList.toggle('active', isEzviz);
+          modeManual.classList.toggle('active', !isEzviz);
+          modeEzviz.setAttribute('aria-selected', String(isEzviz));
+          modeManual.setAttribute('aria-selected', String(!isEzviz));
+          ezvizFields.hidden = !isEzviz;
+          manualFields.hidden = isEzviz;
+        }
+        if (modeEzviz && modeManual) {
+          modeEzviz.addEventListener('click', function () { setMode('ezviz'); });
+          modeManual.addEventListener('click', function () { setMode('manual'); });
+        }
+
+        /* 视频 tab 切换 */
+        var tabAnalysis = document.getElementById('tab-analysis');
+        var tabRaw = document.getElementById('tab-raw');
+        var frameAnalysis = document.getElementById('frame-analysis');
+        var frameRaw = document.getElementById('frame-raw');
+        var videoBadge = document.getElementById('video-badge');
+        function setVideoTab(tab) {
+          var isAnalysis = tab === 'analysis';
+          tabAnalysis.classList.toggle('active', isAnalysis);
+          tabRaw.classList.toggle('active', !isAnalysis);
+          tabAnalysis.setAttribute('aria-selected', String(isAnalysis));
+          tabRaw.setAttribute('aria-selected', String(!isAnalysis));
+          frameAnalysis.hidden = !isAnalysis;
+          frameRaw.hidden = isAnalysis;
+          if (videoBadge) {
+            var dot = videoBadge.querySelector('.status-dot');
+            var label = videoBadge.querySelector('.badge-text');
+            if (!isAnalysis) {
+              dot.classList.remove('online'); dot.classList.add('offline');
+              if (label) label.textContent = '待启动';
+            } else {
+              dot.classList.add('online'); dot.classList.remove('offline');
+              if (label) label.textContent = '监控中';
+            }
+          }
+        }
+        if (tabAnalysis && tabRaw) {
+          tabAnalysis.addEventListener('click', function () { setVideoTab('analysis'); });
+          tabRaw.addEventListener('click', function () { setVideoTab('raw'); });
+        }
+
+        /* 控制按钮演示反馈 */
+        var btnReset = document.getElementById('btn-reset');
+        var controlError = document.getElementById('control-error');
+        var btnPlayer = document.getElementById('btn-player');
+        if (btnReset) {
+          btnReset.addEventListener('click', function () {
+            var v = document.getElementById('meta-baseline');
+            if (v) v.textContent = '0/100';
+          });
+        }
+        if (btnPlayer) {
+          btnPlayer.addEventListener('click', function () {
+            controlError.hidden = false;
+            controlError.querySelector('span').textContent = '播放器初始化失败，请检查浏览器兼容性和萤石播放权限。';
+          });
+        }
+        var btnStop = document.getElementById('btn-stop');
+        var btnStart = document.getElementById('btn-start');
+        var runBadge = document.getElementById('run-badge');
+        var connBadge = document.getElementById('conn-badge');
+        if (btnStop) {
+          btnStop.addEventListener('click', function () {
+            btnStop.disabled = true;
+            btnStart.disabled = false;
+            runBadge.hidden = true;
+            var badgeTextStop = videoBadge.querySelector('.badge-text');
+            if (badgeTextStop) badgeTextStop.textContent = '待启动';
+            videoBadge.querySelector('.status-dot').classList.remove('online');
+            videoBadge.querySelector('.status-dot').classList.add('offline');
+          });
+        }
+        if (btnStart) {
+          btnStart.addEventListener('click', function () {
+            btnStart.disabled = true;
+            btnStop.disabled = false;
+            runBadge.hidden = false;
+            var badgeTextStart = videoBadge.querySelector('.badge-text');
+            if (badgeTextStart) badgeTextStart.textContent = '监控中';
+            videoBadge.querySelector('.status-dot').classList.add('online');
+            videoBadge.querySelector('.status-dot').classList.remove('offline');
+          });
+        }
+
+        /* 仪表盘（ECharts gauge，指针式，配色读 var(--fr-chart-*)） */
+        function buildGauge() {
+          var el = document.getElementById('gauge-chart');
+          if (!el || typeof echarts === 'undefined') return;
+          var chart = echarts.init(el);
+          var textColor = cssVar('--fr-foreground', '#0f172a');
+          var labelColor = cssVar('--fr-chart-text', '#475569');
+          var tickColor = cssVar('--fr-chart-text', '#94a3b8');
+          var primary = cssVar('--fr-chart-primary', '#1d4ed8');
+          chart.setOption({
+            series: [{
+              type: 'gauge',
+              radius: '85%',
+              min: 0, max: 100,
+              startAngle: 210, endAngle: -30,
+              axisLine: {
+                lineStyle: {
+                  width: 18,
+                  color: [
+                    [0.3, cssVar('--fr-chart-low', '#15803d')],
+                    [0.5, cssVar('--fr-chart-attention', '#a16207')],
+                    [0.75, cssVar('--fr-chart-warning', '#c2410c')],
+                    [1, cssVar('--fr-chart-critical', '#b91c1c')]
+                  ]
+                }
+              },
+              pointer: { width: 5, itemStyle: { color: primary } },
+              axisTick: { distance: -18, length: 6, lineStyle: { width: 1, color: tickColor } },
+              splitLine: { distance: -22, length: 14, lineStyle: { width: 2, color: tickColor } },
+              axisLabel: { distance: 36, fontSize: 13, fontWeight: 600, color: labelColor },
+              anchor: { show: true, size: 14, itemStyle: { color: primary } },
+              title: { offsetCenter: [0, '78%'], fontSize: 14, color: labelColor },
+              detail: {
+                valueAnimation: true,
+                formatter: '{value}',
+                fontSize: 36,
+                fontWeight: 700,
+                color: textColor,
+                offsetCenter: [0, '55%']
+              },
+              data: [{ value: 50, name: '风险评分' }]
+            }]
+          });
+          chartInstances.push(chart);
+        }
+
+        function buildTrend() {
+          var el = document.getElementById('trend-chart');
+          if (!el || typeof Chart === 'undefined') return;
+          var ctx = el.getContext('2d');
+          var primary = cssVar('--fr-chart-primary', '#1d4ed8');
+          var grad = ctx.createLinearGradient(0, 0, 0, 240);
+          grad.addColorStop(0, hexToRgba(primary, 0.22));
+          grad.addColorStop(1, hexToRgba(primary, 0.01));
+          var c = new Chart(el, {
+            type: 'line',
+            data: {
+              labels: ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'],
+              datasets: [{
+                label: '风险评分',
+                data: [18, 22, 20, 26, 24, 30, 35, 32, 40, 38, 45, 42, 48, 50],
+                borderColor: primary,
+                backgroundColor: grad,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 3,
+                pointBackgroundColor: primary,
+                borderWidth: 2.5
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: {
+                  ticks: { color: cssVar('--fr-chart-text', '#475569'), font: { size: 11 }, maxRotation: 0 },
+                  grid: { display: false }
+                },
+                y: {
+                  min: 0, max: 100,
+                  ticks: { color: cssVar('--fr-chart-text', '#475569'), font: { size: 11 } },
+                  grid: { color: cssVar('--fr-chart-grid', '#e4eaf2') }
+                }
+              }
+            }
+          });
+          chartInstances.push(c);
+        }
+
+        function rebuildCharts() {
+          destroyCharts();
+          buildGauge();
+          buildTrend();
+        }
+        rebuildCharts();
+      })();
+    </script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
