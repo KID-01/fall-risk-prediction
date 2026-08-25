@@ -314,22 +314,15 @@ class AudioCapture:
             self._ffmpeg_proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,  # 捕获 stderr 用于错误诊断
+                stderr=subprocess.DEVNULL,
                 bufsize=1024 * 1024,
                 creationflags=creationflags,
             )
-            # 等待 ffmpeg 启动并探测流
             time.sleep(1.0)
             if self._ffmpeg_proc.poll() is not None:
-                stderr_out = ""
-                if self._ffmpeg_proc.stderr:
-                    try:
-                        stderr_out = self._ffmpeg_proc.stderr.read(4096).decode("utf-8", errors="replace")
-                    except Exception:
-                        pass
                 log.error(
                     f"ffmpeg 进程异常退出 (code={self._ffmpeg_proc.returncode}): "
-                    f"{stderr_out.strip()[:200]}"
+                    f"source={self.source[:80]}"
                 )
                 return False
             self._is_open = True

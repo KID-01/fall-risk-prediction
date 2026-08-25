@@ -373,6 +373,7 @@ export default function App() {
             device_id: selectedDeviceId,
             channel_no: Number(channelNo),
             person_id: personId,
+            audio_source: audioSource,
           }),
         })
       } else {
@@ -393,7 +394,7 @@ export default function App() {
       }
       if (sourceMode === 'ezviz') setPlayerConfig(await response.json())
       else setPlayerConfig(null)
-      setVideoTab('analysis')
+      if (videoTab !== 'analysis') setVideoTab('analysis')
       fetchStatus()
     } catch (_) {
       setControlError('无法连接后端服务，请确认 FastAPI 已启动')
