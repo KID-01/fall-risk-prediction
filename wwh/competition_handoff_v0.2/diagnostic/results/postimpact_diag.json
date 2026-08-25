@@ -1,0 +1,338 @@
+{
+  "fall-01": {
+    "type": "fall",
+    "impact_frame": 104,
+    "post_zero": 0.8571,
+    "post_low": 0.8571,
+    "post_n": 56,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-02": {
+    "type": "fall",
+    "impact_frame": 61,
+    "post_zero": 0.6774,
+    "post_low": 0.7419,
+    "post_n": 31,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-03": {
+    "type": "fall",
+    "impact_frame": 169,
+    "post_zero": 0.087,
+    "post_low": 0.587,
+    "post_n": 46,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-04": {
+    "type": "fall",
+    "impact_frame": 32,
+    "post_zero": 0.5926,
+    "post_low": 0.5926,
+    "post_n": 27,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-05": {
+    "type": "fall",
+    "impact_frame": 99,
+    "post_zero": 0.3429,
+    "post_low": 0.7143,
+    "post_n": 35,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-06": {
+    "type": "fall",
+    "impact_frame": 36,
+    "post_zero": 0.0,
+    "post_low": 0.0167,
+    "post_n": 60,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-07": {
+    "type": "fall",
+    "impact_frame": 103,
+    "post_zero": 0.3774,
+    "post_low": 0.7736,
+    "post_n": 53,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-08": {
+    "type": "fall",
+    "impact_frame": 46,
+    "post_zero": 0.0222,
+    "post_low": 0.0222,
+    "post_n": 45,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-09": {
+    "type": "fall",
+    "impact_frame": 139,
+    "post_zero": 0.56,
+    "post_low": 0.64,
+    "post_n": 25,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-10": {
+    "type": "fall",
+    "impact_frame": 55,
+    "post_zero": 0.6333,
+    "post_low": 0.8,
+    "post_n": 60,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-11": {
+    "type": "fall",
+    "impact_frame": 66,
+    "post_zero": 0.0,
+    "post_low": 0.0,
+    "post_n": 60,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-12": {
+    "type": "fall",
+    "impact_frame": 40,
+    "post_zero": 0.0667,
+    "post_low": 0.0667,
+    "post_n": 60,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-13": {
+    "type": "fall",
+    "impact_frame": 62,
+    "post_zero": 0.0,
+    "post_low": 0.0,
+    "post_n": 23,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-14": {
+    "type": "fall",
+    "impact_frame": 35,
+    "post_zero": 0.0,
+    "post_low": 0.0,
+    "post_n": 26,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-15": {
+    "type": "fall",
+    "impact_frame": 47,
+    "post_zero": 0.8571,
+    "post_low": 0.8571,
+    "post_n": 21,
+    "pre_zero": 0.0667,
+    "pre_low": 0.0667
+  },
+  "fall-16": {
+    "type": "fall",
+    "impact_frame": 40,
+    "post_zero": 0.0,
+    "post_low": 0.0,
+    "post_n": 15,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-17": {
+    "type": "fall",
+    "impact_frame": 75,
+    "post_zero": 0.9375,
+    "post_low": 0.9375,
+    "post_n": 16,
+    "pre_zero": 0.2,
+    "pre_low": 0.2
+  },
+  "fall-18": {
+    "type": "fall",
+    "impact_frame": 35,
+    "post_zero": 0.1667,
+    "post_low": 0.3333,
+    "post_n": 6,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-19": {
+    "type": "fall",
+    "impact_frame": 47,
+    "post_zero": 0.5,
+    "post_low": 0.75,
+    "post_n": 4,
+    "pre_zero": 0.1333,
+    "pre_low": 0.1333
+  },
+  "fall-20": {
+    "type": "fall",
+    "impact_frame": 40,
+    "post_zero": 0.1833,
+    "post_low": 0.2,
+    "post_n": 60,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-21": {
+    "type": "fall",
+    "impact_frame": 42,
+    "post_zero": 0.8,
+    "post_low": 0.8,
+    "post_n": 5,
+    "pre_zero": 0.3333,
+    "pre_low": 0.3333
+  },
+  "fall-22": {
+    "type": "fall",
+    "impact_frame": 24,
+    "post_zero": 0.7419,
+    "post_low": 0.7742,
+    "post_n": 31,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-23": {
+    "type": "fall",
+    "impact_frame": 47,
+    "post_zero": 0.75,
+    "post_low": 0.8571,
+    "post_n": 28,
+    "pre_zero": 0.2667,
+    "pre_low": 0.2667
+  },
+  "fall-24": {
+    "type": "fall",
+    "impact_frame": 28,
+    "post_zero": 0.1111,
+    "post_low": 0.1111,
+    "post_n": 9,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-25": {
+    "type": "fall",
+    "impact_frame": 64,
+    "post_zero": 0.25,
+    "post_low": 1.0,
+    "post_n": 4,
+    "pre_zero": 0.0667,
+    "pre_low": 0.0667
+  },
+  "fall-26": {
+    "type": "fall",
+    "impact_frame": 35,
+    "post_zero": 0.0,
+    "post_low": 0.0,
+    "post_n": 3,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "fall-27": {
+    "type": "fall",
+    "impact_frame": 73,
+    "post_zero": 0.0,
+    "post_low": 1.0,
+    "post_n": 3,
+    "pre_zero": 0.1333,
+    "pre_low": 0.1333
+  },
+  "fall-28": {
+    "type": "fall",
+    "impact_frame": 48,
+    "post_zero": 0.5,
+    "post_low": 0.75,
+    "post_n": 8,
+    "pre_zero": 0.0,
+    "pre_low": 0.0667
+  },
+  "fall-29": {
+    "type": "fall",
+    "impact_frame": 71,
+    "post_zero": 0.9286,
+    "post_low": 0.9643,
+    "post_n": 28,
+    "pre_zero": 0.2,
+    "pre_low": 0.2
+  },
+  "fall-30": {
+    "type": "fall",
+    "impact_frame": 47,
+    "post_zero": null,
+    "post_low": null,
+    "post_n": 0,
+    "pre_zero": 0.0,
+    "pre_low": 0.0
+  },
+  "adl-10": {
+    "type": "adl",
+    "whole_zero": 0.0,
+    "whole_low": 0.0,
+    "n": 300
+  },
+  "adl-11": {
+    "type": "adl",
+    "whole_zero": 0.01,
+    "whole_low": 0.01,
+    "n": 300
+  },
+  "adl-21": {
+    "type": "adl",
+    "whole_zero": 0.2778,
+    "whole_low": 0.2778,
+    "n": 234
+  },
+  "adl-22": {
+    "type": "adl",
+    "whole_zero": 0.2209,
+    "whole_low": 0.2209,
+    "n": 172
+  },
+  "adl-30": {
+    "type": "adl",
+    "whole_zero": 0.1746,
+    "whole_low": 0.1825,
+    "n": 252
+  },
+  "adl-31": {
+    "type": "adl",
+    "whole_zero": 0.244,
+    "whole_low": 0.268,
+    "n": 250
+  },
+  "adl-32": {
+    "type": "adl",
+    "whole_zero": 0.34,
+    "whole_low": 0.35,
+    "n": 200
+  },
+  "adl-33": {
+    "type": "adl",
+    "whole_zero": 0.235,
+    "whole_low": 0.26,
+    "n": 200
+  },
+  "adl-34": {
+    "type": "adl",
+    "whole_zero": 0.1474,
+    "whole_low": 0.1632,
+    "n": 190
+  },
+  "adl-35": {
+    "type": "adl",
+    "whole_zero": 0.2607,
+    "whole_low": 0.275,
+    "n": 280
+  },
+  "adl-39": {
+    "type": "adl",
+    "whole_zero": 0.3,
+    "whole_low": 0.3148,
+    "n": 270
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "mode": "A1-discrim",
+  "early_win": 0.3,
+  "feat_cols": [
+    "hip_mid_y_min",
+    "rh_y_min",
+    "body_h_min",
+    "body_h_delta",
+    "torso_ok_min",
+    "nose_y_min",
+    "ls_y_min",
+    "torso_ok_delta",
+    "hip_mid_y_delta",
+    "ls_y_delta",
+    "ls_x_min"
+  ],
+  "ewr0.5": 0.1667,
+  "ewr0.3": 0.3333,
+  "ewr0.2": 0.4,
+  "fa_per_min": 6.3496,
+  "lead_median": 0.6,
+  "n_qual_leads": 5,
+  "per_fold": [
+    {
+      "fold": 0,
+      "C": 10.0,
+      "theta_pct": 97.5,
+      "theta": 0.1635,
+      "ewr05": 0.1667,
+      "ewr03": 0.1667,
+      "ewr02": 0.3333,
+      "fa_per_min": 10.7335
+    },
+    {
+      "fold": 1,
+      "C": 10.0,
+      "theta_pct": 97.5,
+      "theta": 0.1765,
+      "ewr05": 0.3333,
+      "ewr03": 0.6667,
+      "ewr02": 0.6667,
+      "fa_per_min": 4.4253
+    },
+    {
+      "fold": 2,
+      "C": 10.0,
+      "theta_pct": 99,
+      "theta": 0.2536,
+      "ewr05": 0.0,
+      "ewr03": 0.0,
+      "ewr02": 0.0,
+      "fa_per_min": 9.0967
+    },
+    {
+      "fold": 3,
+      "C": 10.0,
+      "theta_pct": 99,
+      "theta": 0.3084,
+      "ewr05": 0.3333,
+      "ewr03": 0.5,
+      "ewr02": 0.6667,
+      "fa_per_min": 3.6561
+    },
+    {
+      "fold": 4,
+      "C": 10.0,
+      "theta_pct": 97.5,
+      "theta": 0.1825,
+      "ewr05": 0.0,
+      "ewr03": 0.3333,
+      "ewr02": 0.3333,
+      "fa_per_min": 3.8772
+    }
+  ],
+  "frozen_v10_baseline": {
+    "ewr0.5": 0.2333,
+    "fa_per_min": 6.8124
+  }
+}
