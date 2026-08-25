@@ -203,6 +203,38 @@ class AlertEngine:
         self._event_log.append(event)
         return event
 
+    def evaluate_audio_only(
+        self,
+        audio_events: list[AudioEvent],
+        timestamp: float,
+    ) -> AlertEvent:
+        """纯音频事件评估(基线未就绪时使用, 无需视频偏差)"""
+        level = RiskLevel.LOW
+        message = "音频事件正常"
+
+        for event in audio_events:
+            if event.category == SoundCategory.IMPACT and event.score >= self.impact_critical_threshold:
+                if level.priority < RiskLevel.CRITICAL.priority:
+                    level = RiskLevel.CRITICAL
+                    message = f"撞击声触发高危: {event.label} ({event.score:.2f})"
+            elif event.category == SoundCategory.VOCAL_DISTRESS and event.score >= self.vocal_attention_threshold:
+                if level.priority < RiskLevel.ATTENTION.priority:
+                    level = RiskLevel.ATTENTION
+                    message = f"人声呼救: {event.label} ({event.score:.2f})"
+
+        alert = AlertEvent(level=level, timestamp=timestamp, message=message)
+
+        if level.priority > 0:
+            for action in self._actions[level]:
+                try:
+                    action(alert)
+                    alert.notified = True
+                except Exception as e:
+                    alert.message += f" [通知失败: {e}]"
+
+        self._event_log.append(alert)
+        return alert
+
     def get_events(
         self,
         level: RiskLevel | None = None,

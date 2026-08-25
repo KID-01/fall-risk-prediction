@@ -117,9 +117,18 @@ class FallRiskMonitor:
         self.person_id = person_id
         self.device_id = device_id
 
+        audio_cfg_enabled = self.config.get("audio", {}).get("enabled", False)
         cfg_audio_source = self.config.get("audio", {}).get("source", "off")
         effective_audio_source = audio_source if audio_source is not None else cfg_audio_source
-        audio_enabled = effective_audio_source not in ("off", "auto", "")
+
+        if effective_audio_source == "auto":
+            src_lower = source.lower()
+            if src_lower.startswith(("rtsp://", "rtmp://")):
+                effective_audio_source = source
+            else:
+                effective_audio_source = "off"
+
+        audio_enabled = audio_cfg_enabled and effective_audio_source not in ("off", "")
 
         self.status = MonitorStatus(
             is_running=True,
@@ -237,14 +246,23 @@ class FallRiskMonitor:
                             self.status.baseline_ready = baseline.is_ready
                             self.status.baseline_samples = baseline.sample_count
 
+                        # 阶段7: 从音频线程排空待处理事件（无论基线是否就绪）
+                        with self.status._audio_lock:
+                            pending_events = list(self.status._pending_audio_events)
+                            self.status._pending_audio_events.clear()
+
+                        # 基线未就绪时, 纯音频事件仍触发预警(无需视频偏差)
+                        if not baseline.is_ready and pending_events:
+                            audio_alert = self.alert_engine.evaluate_audio_only(
+                                pending_events, feature.timestamp,
+                            )
+                            self.status.last_alert = audio_alert
+                            if audio_alert.level != RiskLevel.LOW:
+                                self.status.current_risk_level = audio_alert.level
+
                         if baseline.is_ready:
                             deviation = self.deviation_detector.check(feature, baseline)
                             self.status.last_deviation = deviation
-
-                            # 阶段7: 从音频线程排空待处理事件
-                            with self.status._audio_lock:
-                                pending_events = list(self.status._pending_audio_events)
-                                self.status._pending_audio_events.clear()
 
                             alert = self.alert_engine.evaluate(
                                 deviation, feature.timestamp,
@@ -279,6 +297,18 @@ class FallRiskMonitor:
                             except Exception as e:
                                 log.error(f"持久化失败: {e}")
 
+                        # 音频事件入库(独立于视频偏差逻辑)
+                        if pending_events:
+                            try:
+                                db = Database()
+                                db.insert_audio_events(
+                                    pending_events,
+                                    person_id=person_id,
+                                    device_id=device_id,
+                                )
+                            except Exception as e:
+                                log.error(f"音频事件持久化失败: {e}")
+
                     time.sleep(inference_interval)
         except Exception as e:
             log.error(f"监控线程异常: {e}")
@@ -307,6 +337,8 @@ class FallRiskMonitor:
                         if result.events:
                             with self.status._audio_lock:
                                 self.status._pending_audio_events.extend(result.events)
+                                if len(self.status._pending_audio_events) > 100:
+                                    self.status._pending_audio_events = self.status._pending_audio_events[-100:]
 
                     except Exception as e:
                         self.status.audio_error = str(e)

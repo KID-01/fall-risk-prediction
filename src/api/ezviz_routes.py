@@ -153,6 +153,7 @@ async def start_monitor(
         source=analysis_url,
         person_id=body.person_id,
         device_id=body.device_id,
+        audio_source=analysis_url,
     ):
         raise HTTPException(status_code=500, detail="后端监控启动失败")
     response.headers["Cache-Control"] = "no-store"

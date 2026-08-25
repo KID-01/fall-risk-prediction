@@ -197,27 +197,29 @@ class AudioAnalyzer:
     def _build_events(self, scores: np.ndarray, timestamp: float = 0.0) -> list[AudioEvent]:
         """按类别阈值筛选声音事件, 仅对已知类别产出事件"""
         events: list[AudioEvent] = []
+        vocal_set = set(self.vocal_indices)
+        impact_set = set(self.impact_indices)
         for idx in range(len(scores)):
             score = float(scores[idx])
             if score < self.min_event_score:
                 continue
-            if idx in VOCAL_DISTRESS_LABELS:
+            if idx in vocal_set:
                 if score >= self.vocal_threshold:
                     events.append(
                         AudioEvent(
                             category=SoundCategory.VOCAL_DISTRESS,
-                            label=VOCAL_DISTRESS_LABELS[idx],
+                            label=VOCAL_DISTRESS_LABELS.get(idx, f"class_{idx}"),
                             class_index=idx,
                             score=score,
                             timestamp=timestamp,
                         )
                     )
-            elif idx in IMPACT_LABELS:
+            elif idx in impact_set:
                 if score >= self.impact_threshold:
                     events.append(
                         AudioEvent(
                             category=SoundCategory.IMPACT,
-                            label=IMPACT_LABELS[idx],
+                            label=IMPACT_LABELS.get(idx, f"class_{idx}"),
                             class_index=idx,
                             score=score,
                             timestamp=timestamp,

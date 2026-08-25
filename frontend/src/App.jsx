@@ -88,6 +88,7 @@ export default function App() {
   const [sourceMode, setSourceMode] = useState('ezviz')
   const [source, setSource] = useState(() => localStorage.getItem('monitor_source') || '')
   const [personId, setPersonId] = useState(() => localStorage.getItem('monitor_person_id') || 'default')
+  const [audioSource, setAudioSource] = useState(() => localStorage.getItem('monitor_audio_source') || 'off')
   const [devices, setDevices] = useState([])
   const [selectedDeviceId, setSelectedDeviceId] = useState('')
   const [channelNo, setChannelNo] = useState(1)
@@ -350,6 +351,7 @@ export default function App() {
   // ── 控制操作 ──
   const startMonitor = async () => {
     localStorage.setItem('monitor_person_id', personId)
+    localStorage.setItem('monitor_audio_source', audioSource)
     setControlError('')
     setPlayerError('')
 
@@ -380,7 +382,7 @@ export default function App() {
         localStorage.setItem('monitor_source', source)
         response = await fetch(`${API_BASE}/stream/start`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, person_id: personId }),
+          body: JSON.stringify({ source, person_id: personId, audio_source: audioSource }),
         })
       }
 
@@ -501,6 +503,16 @@ export default function App() {
             onChange={e => setPersonId(e.target.value)}
             disabled={status.is_running}
           />
+          <select
+            value={audioSource}
+            onChange={e => setAudioSource(e.target.value)}
+            disabled={status.is_running}
+            aria-label="音频源"
+          >
+            <option value="auto">音频: 自动(跟随视频源)</option>
+            <option value="off">音频: 关闭</option>
+            <option value="mic">音频: 麦克风</option>
+          </select>
         </div>
         {controlError && <div className="control-error" role="alert">{controlError}</div>}
         <div className="control-buttons">
@@ -548,7 +560,16 @@ export default function App() {
               {playerState === 'error' && <div className="video-error" role="alert">{playerError}</div>}
             </>
           ) : (
-            <AudioMonitor />
+            <AudioMonitor
+              pipelineAudio={{
+                enabled: status.audio_enabled,
+                source: status.audio_source,
+                chunksProcessed: status.audio_chunks_processed,
+                error: status.audio_error,
+                lastResult: status.last_audio_result,
+                lastAlert: status.last_alert,
+              }}
+            />
           )}
         </div>
         {videoTab === 'raw' && selectedDeviceId && <div className="video-actions"><button className="btn btn-secondary" type="button" onClick={refreshPlayer}>{playerConfig ? '刷新播放授权' : '加载原始画面'}</button></div>}
@@ -573,7 +594,18 @@ export default function App() {
             <div className="meta-value">{status.frames_valid || 0}</div>
             <div className="meta-label">有效帧数</div>
           </div>
+          {status.audio_enabled && (
+            <div className="meta-item">
+              <div className="meta-value">{status.audio_chunks_processed || 0}</div>
+              <div className="meta-label">音频块数</div>
+            </div>
+          )}
         </div>
+        {status.audio_error && (
+          <div className="audio-error-banner" role="alert">
+            音频异常: {status.audio_error}
+          </div>
+        )}
       </div>
 
       {/* ── 图表网格 ── */}

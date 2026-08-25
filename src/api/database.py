@@ -80,6 +80,22 @@ class Database:
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_alert_timestamp ON alert_events(timestamp)
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS audio_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL NOT NULL,
+                    device_id TEXT DEFAULT 'default',
+                    person_id TEXT DEFAULT 'default',
+                    category TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    class_index INTEGER,
+                    score REAL NOT NULL,
+                    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_audio_timestamp ON audio_events(timestamp)
+            """)
         log.info(f"数据库初始化完成: {self.db_path}")
 
     # ── 风险记录 ──
@@ -207,6 +223,63 @@ class Database:
                 (alert_id,),
             )
             return cursor.rowcount > 0
+
+    # ── 音频事件 ──
+
+    def insert_audio_events(
+        self,
+        events: list,
+        person_id: str = "default",
+        device_id: str = "default",
+    ) -> int:
+        """批量插入音频事件"""
+        if not events:
+            return 0
+        rows = [
+            (e.timestamp, device_id, person_id, e.category.value, e.label, e.class_index, e.score)
+            for e in events
+        ]
+        with self._get_conn() as conn:
+            conn.executemany(
+                """INSERT INTO audio_events
+                   (timestamp, device_id, person_id, category, label, class_index, score)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                rows,
+            )
+        return len(rows)
+
+    def query_audio_events(
+        self,
+        person_id: str | None = None,
+        category: str | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict]:
+        """查询音频事件历史"""
+        query = "SELECT * FROM audio_events WHERE 1=1"
+        params: list[Any] = []
+
+        if person_id:
+            query += " AND person_id = ?"
+            params.append(person_id)
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+        if start_time is not None:
+            query += " AND timestamp >= ?"
+            params.append(start_time)
+        if end_time is not None:
+            query += " AND timestamp <= ?"
+            params.append(end_time)
+
+        query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        with self._get_conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
 
     # ── 统计 ──
 

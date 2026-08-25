@@ -50,7 +50,14 @@ async def stream_start(req: MonitorStartRequest):
     )
     if not success:
         raise HTTPException(status_code=500, detail="启动失败")
-    return {"code": 200, "message": "监控已启动", "source": req.source, "person_id": req.person_id, "device_id": req.device_id}
+    return {
+        "code": 200,
+        "message": "监控已启动",
+        "source": req.source,
+        "person_id": req.person_id,
+        "device_id": req.device_id,
+        "audio_source": monitor.status.audio_source,
+    }
 
 
 @monitor_router.post("/stream/stop")
@@ -136,3 +143,28 @@ stats_router = APIRouter(prefix="/api/v1", tags=["统计"])
 async def get_stats(hours: int = 24):
     """统计面板数据"""
     return db.get_stats(hours=hours)
+
+
+# ── 音频事件路由 ──
+
+audio_events_router = APIRouter(prefix="/api/v1", tags=["音频事件"])
+
+
+@audio_events_router.get("/audio/events")
+async def get_audio_events(
+    person_id: str | None = None,
+    category: str | None = None,
+    hours: int = 24,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """查询音频事件历史"""
+    start_time = time.time() - hours * 3600
+    events = db.query_audio_events(
+        person_id=person_id,
+        category=category,
+        start_time=start_time,
+        limit=limit,
+        offset=offset,
+    )
+    return {"total": len(events), "events": events}

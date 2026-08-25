@@ -54,7 +54,7 @@ class TestMonitorStartStopAudio:
         m = FallRiskMonitor.__new__(FallRiskMonitor)
         m._initialized = False
         m.config = MagicMock()
-        m.config.get.return_value = {"source": "off"}
+        m.config.get.return_value = {"source": "off", "enabled": True}
         m.config.audio.sample_rate = 32000
         m.config.audio.chunk_seconds = 10
         m.config.audio.get.return_value = ""
@@ -100,7 +100,7 @@ class TestMonitorStartStopAudio:
 
     def test_start_with_config_off_skips(self):
         m = self._make()
-        m.config.get.return_value = {"source": "off"}
+        m.config.get.return_value = {"source": "off", "enabled": True}
         m.start(source="0")
         assert m.status.audio_enabled is False
 

@@ -15,6 +15,7 @@ from typing import Any
 import soundfile as sf
 from fastapi import APIRouter, HTTPException, UploadFile
 
+from src.api.database import Database
 from src.inference.audio_analyzer import AudioAnalyzer
 from src.utils.logger import get_logger
 
@@ -97,9 +98,16 @@ async def analyze_audio(file: UploadFile, timestamp: float = 0.0) -> dict[str, A
         result = await asyncio.to_thread(
             analyzer.analyze_waveform, waveform, int(sample_rate), timestamp
         )
-    except RuntimeError as exc:
+    except Exception as exc:
         log.warning(f"音频分析失败: {exc}")
-        raise HTTPException(status_code=503, detail=f"音频模型不可用: {exc}") from exc
+        raise HTTPException(status_code=503, detail=f"音频分析失败: {exc}") from exc
+
+    if result.events:
+        try:
+            db = Database()
+            db.insert_audio_events(result.events)
+        except Exception as exc:
+            log.warning(f"音频事件持久化失败: {exc}")
 
     return {
         "duration_sec": result.duration_sec,

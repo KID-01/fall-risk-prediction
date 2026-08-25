@@ -109,5 +109,6 @@ def test_monitor_start_uses_private_analysis_stream(api_client, monkeypatch):
         source="rtmp://example.invalid/private-analysis",
         person_id="test-person",
         device_id=device_id,
+        audio_source="rtmp://example.invalid/private-analysis",
     )
     assert "private-analysis" not in response.text
