@@ -447,6 +447,27 @@ export default function AudioMonitor({ pipelineAudio }) {
                 <div className="pipeline-audio-topk">
                   <h5>声音标签分布</h5>
                   <div ref={pipelineChartRef} className="audio-chart" style={{ height: '220px' }} />
+                  <details className="audio-label-ref">
+                    <summary>编号对照表</summary>
+                    <div className="label-ref-grid">
+                      {[
+                        [0, '人声/说话声', 'vocal'], [8, '呼喊', 'vocal'], [10, '欢呼', 'vocal'],
+                        [11, '叫喊', 'vocal'], [13, '笑声', 'vocal'], [14, '尖叫', 'vocal'],
+                        [22, '哭泣', 'vocal'], [23, '婴儿哭', 'vocal'], [25, '哀号', 'vocal'],
+                        [26, '叹气/喘息', 'vocal'], [38, '呻吟', 'vocal'], [44, '喘气', 'vocal'],
+                        [46, '脚步声', 'activity'], [47, '跑步声', 'activity'], [66, '拍手', 'activity'],
+                        [106, '开关门', 'activity'], [107, '门铃', 'activity'],
+                        [358, '摔门/猛击', 'impact'], [359, '敲击', 'impact'],
+                        [441, '玻璃碎裂', 'impact'], [443, '破碎', 'impact'],
+                        [460, '沉闷撞击', 'impact'], [466, '砰击', 'impact'],
+                        [469, '摔砸', 'impact'], [470, '碎裂', 'impact'],
+                      ].map(([id, label, cat]) => (
+                        <span key={id} className={`label-ref-item label-ref-${cat}`}>
+                          <code>{id}</code> {label}
+                        </span>
+                      ))}
+                    </div>
+                  </details>
                 </div>
               )}
             </div>

@@ -457,6 +457,12 @@ svg { display: inline-block; vertical-align: middle; }
   align-items: center;
   justify-content: center;
 }
+.video-frame-wrap:has(.audio-monitor) {
+  aspect-ratio: unset;
+  overflow: visible;
+  align-items: stretch;
+  justify-content: stretch;
+}
 .video-frame {
   width: 100%;
   height: 100%;
@@ -581,7 +587,7 @@ svg { display: inline-block; vertical-align: middle; }
    音频监测组件层（AudioMonitor 内嵌）
    ============================================================ */
 
-.audio-monitor { display: flex; flex-direction: column; gap: 20px; width: 100%; }
+.audio-monitor { display: flex; flex-direction: column; gap: 20px; width: 100%; padding: 16px; box-sizing: border-box; }
 
 .audio-toolbar {
   display: flex;
@@ -590,6 +596,7 @@ svg { display: inline-block; vertical-align: middle; }
   flex-wrap: wrap;
   gap: 12px;
   padding: 16px 20px;
+  margin-top: 12px;
   background: var(--fr-card);
   border-radius: var(--fr-radius-lg);
   border: 1px solid var(--fr-border);
@@ -694,6 +701,7 @@ svg { display: inline-block; vertical-align: middle; }
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
   padding: 14px;
+  margin-top: 8px;
   background: var(--fr-surface);
   border-radius: var(--fr-radius-md);
   border: 1px solid var(--fr-border);
@@ -720,6 +728,15 @@ svg { display: inline-block; vertical-align: middle; }
 }
 .events-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .audio-chart { width: 100%; }
+.audio-label-ref { margin-top: 10px; }
+.audio-label-ref summary { font-size: 12px; color: var(--fr-muted-foreground); cursor: pointer; user-select: none; }
+.audio-label-ref summary:hover { color: var(--fr-foreground); }
+.label-ref-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.label-ref-item { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: var(--fr-surface); border: 1px solid var(--fr-border); }
+.label-ref-item code { font-weight: 600; margin-right: 4px; }
+.label-ref-vocal { border-left: 3px solid var(--fr-state-warning); }
+.label-ref-impact { border-left: 3px solid var(--fr-state-error); }
+.label-ref-activity { border-left: 3px solid var(--fr-state-success); }
 
 /* 手动分析标题 */
 .audio-manual-title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; color: var(--fr-foreground); }
