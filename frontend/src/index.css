@@ -462,6 +462,7 @@ svg { display: inline-block; vertical-align: middle; }
   overflow: visible;
   align-items: stretch;
   justify-content: stretch;
+  min-height: 600px;
 }
 .video-frame {
   width: 100%;
