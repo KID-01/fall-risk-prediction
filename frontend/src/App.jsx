@@ -6,6 +6,68 @@ const LEVEL_LABELS = { low: '低风险', attention: '关注级', warning: '预�
 const LEVEL_COLORS = { low: '#22c55e', attention: '#eab308', warning: '#f97316', critical: '#ef4444' }
 const LEVEL_ICONS = { low: '✓', attention: '◉', warning: '⚠', critical: '✕' }
 
+async function readError(response) {
+  const payload = await response.json().catch(() => ({}))
+  return payload.detail || payload.message || `请求失败（${response.status}）`
+}
+
+function EzvizPlayer({ active, config, setPlayerState, setPlayerError }) {
+  const hostRef = useRef(null)
+
+  useEffect(() => {
+    if (!active || !config || !hostRef.current) return undefined
+
+    let cancelled = false
+    let player
+    setPlayerState('loading')
+    setPlayerError('')
+
+    import('ezuikit-js')
+      .then(({ EZUIKitPlayer }) => {
+        if (cancelled || !hostRef.current) return
+        const width = Math.max(320, Math.floor(hostRef.current.clientWidth))
+        player = new EZUIKitPlayer({
+          id: 'ezviz-player',
+          accessToken: config.accessToken,
+          url: config.url,
+          width,
+          height: Math.floor(width * 9 / 16),
+          template: 'pcLive',
+          audio: false,
+          handleSuccess: () => {
+            if (!cancelled) setPlayerState('playing')
+          },
+          handleError: error => {
+            if (cancelled) return
+            console.error('EZUIKit 播放失败', error)
+            const encrypted = error?.type === 'handleRunTimeInfoError' && error?.data?.nErrorCode === 5
+            setPlayerState('error')
+            setPlayerError(encrypted
+              ? '设备已启用视频加密，需要设备验证码。'
+              : '萤石视频播放失败，请确认设备在线并刷新播放授权。')
+          },
+        })
+      })
+      .catch(error => {
+        if (cancelled) return
+        console.error('EZUIKit 初始化失败', error)
+        setPlayerState('error')
+        setPlayerError('播放器初始化失败，请检查浏览器兼容性和萤石播放权限。')
+      })
+
+    return () => {
+      cancelled = true
+      try {
+        player?.stop?.()
+        player?.destroy?.()
+      } catch (_) { /* 播放器释放失败不影响后端监控 */ }
+      setPlayerState('idle')
+    }
+  }, [active, config, setPlayerError, setPlayerState])
+
+  return <div ref={hostRef} className="ezviz-player-host"><div id="ezviz-player" /></div>
+}
+
 export default function App() {
   const [status, setStatus] = useState({
     is_running: false,
@@ -22,15 +84,69 @@ export default function App() {
   const [riskHistory, setRiskHistory] = useState([])
   const [stats, setStats] = useState({})
   const [connected, setConnected] = useState(false)
-  const [source, setSource] = useState(() => localStorage.getItem('monitor_source') || 'rtmp://rtmp01open.ys7.com:1935/v3/openlive/BK8392637_1_1')
+  const [sourceMode, setSourceMode] = useState('ezviz')
+  const [source, setSource] = useState(() => localStorage.getItem('monitor_source') || '')
   const [personId, setPersonId] = useState(() => localStorage.getItem('monitor_person_id') || 'default')
+  const [devices, setDevices] = useState([])
+  const [selectedDeviceId, setSelectedDeviceId] = useState('')
+  const [channelNo, setChannelNo] = useState(1)
+  const [devicesLoading, setDevicesLoading] = useState(false)
+  const [controlError, setControlError] = useState('')
+  const [videoTab, setVideoTab] = useState('analysis')
+  const [playerConfig, setPlayerConfig] = useState(null)
+  const [playerState, setPlayerState] = useState('idle')
+  const [playerError, setPlayerError] = useState('')
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('theme')
     return saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   })
   const wsRef = useRef(null)
+  const videoWsRef = useRef(null)
+  const videoImgRef = useRef(null)
   const gaugeRef = useRef(null)
   const trendRef = useRef(null)
+
+  const selectedDevice = devices.find(device => device.device_id === selectedDeviceId)
+
+  const fetchEzvizDevices = useCallback(async () => {
+    setDevicesLoading(true)
+    setControlError('')
+    try {
+      const response = await fetch(`${API_BASE}/ezviz/devices`)
+      if (!response.ok) throw new Error(await readError(response))
+      const nextDevices = (await response.json()).devices || []
+      setDevices(nextDevices)
+      setSelectedDeviceId(current => {
+        if (current && nextDevices.some(device => device.device_id === current)) return current
+        return (nextDevices.find(device => device.online) || nextDevices[0])?.device_id || ''
+      })
+    } catch (error) {
+      setDevices([])
+      setSelectedDeviceId('')
+      setControlError(error.message || '萤石设备列表加载失败')
+    } finally {
+      setDevicesLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchEzvizDevices()
+  }, [fetchEzvizDevices])
+
+  useEffect(() => {
+    if (selectedDevice && !selectedDevice.channels.includes(Number(channelNo))) {
+      setChannelNo(selectedDevice.channels[0])
+    }
+  }, [selectedDevice, channelNo])
+
+  const changeSourceMode = mode => {
+    if (status.is_running) return
+    setSourceMode(mode)
+    setControlError('')
+    setPlayerConfig(null)
+    setPlayerError('')
+    setVideoTab('analysis')
+  }
 
   // ── 主题切换 ──
   useEffect(() => {
@@ -88,6 +204,39 @@ export default function App() {
 
     return () => ws.close()
   }, [])
+
+  // ── 视频 WebSocket ──
+  useEffect(() => {
+    if (videoTab !== 'analysis') return undefined
+
+    let stopped = false
+    let currentObjectUrl = ''
+    const connectVideo = () => {
+      if (stopped) return
+      const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/video`
+      const ws = new WebSocket(wsUrl)
+      videoWsRef.current = ws
+
+      ws.onmessage = (event) => {
+        if (videoImgRef.current && event.data instanceof Blob) {
+          const url = URL.createObjectURL(event.data)
+          if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
+          currentObjectUrl = url
+          videoImgRef.current.src = url
+        }
+      }
+
+      ws.onclose = () => {
+        if (!stopped) setTimeout(connectVideo, 3000)
+      }
+    }
+    connectVideo()
+    return () => {
+      stopped = true
+      videoWsRef.current?.close()
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
+    }
+  }, [videoTab])
 
   // ── 定时刷新 ──
   useEffect(() => {
@@ -199,17 +348,88 @@ export default function App() {
 
   // ── 控制操作 ──
   const startMonitor = async () => {
-    localStorage.setItem('monitor_source', source)
     localStorage.setItem('monitor_person_id', personId)
-    await fetch(`${API_BASE}/stream/start`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source, person_id: personId }),
-    })
-    fetchStatus()
+    setControlError('')
+    setPlayerError('')
+
+    try {
+      let response
+      if (sourceMode === 'ezviz') {
+        if (!selectedDevice) {
+          setControlError('请先选择萤石设备')
+          return
+        }
+        if (!selectedDevice.online) {
+          setControlError('所选设备当前离线')
+          return
+        }
+        response = await fetch(`${API_BASE}/ezviz/monitor/start`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            device_id: selectedDeviceId,
+            channel_no: Number(channelNo),
+            person_id: personId,
+          }),
+        })
+      } else {
+        if (!source.trim()) {
+          setControlError('请输入本地文件、RTMP 或 RTSP 视频源地址')
+          return
+        }
+        localStorage.setItem('monitor_source', source)
+        response = await fetch(`${API_BASE}/stream/start`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, person_id: personId }),
+        })
+      }
+
+      if (!response.ok) {
+        setControlError(await readError(response))
+        return
+      }
+      if (sourceMode === 'ezviz') setPlayerConfig(await response.json())
+      else setPlayerConfig(null)
+      setVideoTab('analysis')
+      fetchStatus()
+    } catch (_) {
+      setControlError('无法连接后端服务，请确认 FastAPI 已启动')
+    }
   }
   const stopMonitor = async () => {
-    await fetch(`${API_BASE}/stream/stop`, { method: 'POST' })
-    fetchStatus()
+    try {
+      const response = await fetch(`${API_BASE}/stream/stop`, { method: 'POST' })
+      if (!response.ok) {
+        setControlError(await readError(response))
+        return
+      }
+      setPlayerConfig(null)
+      setPlayerError('')
+      setPlayerState('idle')
+      setVideoTab('analysis')
+      fetchStatus()
+    } catch (_) {
+      setControlError('无法连接后端服务，请确认 FastAPI 已启动')
+    }
+  }
+  const refreshPlayer = async () => {
+    if (!selectedDeviceId) return
+    setPlayerState('loading')
+    setPlayerError('')
+    try {
+      const response = await fetch(`${API_BASE}/ezviz/player`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: selectedDeviceId, channel_no: Number(channelNo) }),
+      })
+      if (!response.ok) {
+        setPlayerState('error')
+        setPlayerError(await readError(response))
+        return
+      }
+      setPlayerConfig(await response.json())
+    } catch (_) {
+      setPlayerState('error')
+      setPlayerError('无法连接后端服务，请确认 FastAPI 已启动')
+    }
   }
   const resetBaseline = async () => {
     await fetch(`${API_BASE}/baseline/reset`, { method: 'POST' })
@@ -242,24 +462,48 @@ export default function App() {
 
       {/* ── 控制按钮 ── */}
       <div className="controls">
+        <div className="source-mode" role="group" aria-label="视频源模式">
+          <button type="button" disabled={status.is_running} className={sourceMode === 'ezviz' ? 'active' : ''} onClick={() => changeSourceMode('ezviz')}>萤石设备</button>
+          <button type="button" disabled={status.is_running} className={sourceMode === 'manual' ? 'active' : ''} onClick={() => changeSourceMode('manual')}>手工地址</button>
+        </div>
         <div className="control-inputs">
-          <input
-            className="input-source"
-            type="text"
-            placeholder="RTMP/RTSP 视频源地址"
-            value={source}
-            onChange={e => setSource(e.target.value)}
-          />
+          {sourceMode === 'ezviz' ? (
+            <>
+              <select value={selectedDeviceId} onChange={e => setSelectedDeviceId(e.target.value)} aria-label="萤石设备" disabled={status.is_running}>
+                <option value="">{devicesLoading ? '正在加载设备' : '请选择设备'}</option>
+                {devices.map(device => (
+                  <option key={device.device_id} value={device.device_id}>
+                    {device.name}（{device.display_serial}，{device.online ? '在线' : '离线'}）
+                  </option>
+                ))}
+              </select>
+              <select value={channelNo} onChange={e => setChannelNo(Number(e.target.value))} disabled={!selectedDevice || status.is_running} aria-label="设备通道">
+                {(selectedDevice?.channels || []).map(channel => <option key={channel} value={channel}>通道 {channel}</option>)}
+              </select>
+              <button className="btn btn-secondary" type="button" onClick={fetchEzvizDevices} disabled={devicesLoading || status.is_running}>刷新设备</button>
+            </>
+          ) : (
+            <input
+              className="input-source"
+              type="text"
+              placeholder="本地文件、RTMP 或 RTSP 视频源地址"
+              value={source}
+              onChange={e => setSource(e.target.value)}
+              disabled={status.is_running}
+            />
+          )}
           <input
             className="input-person"
             type="text"
             placeholder="被监测人 ID"
             value={personId}
             onChange={e => setPersonId(e.target.value)}
+            disabled={status.is_running}
           />
         </div>
+        {controlError && <div className="control-error" role="alert">{controlError}</div>}
         <div className="control-buttons">
-          <button className="btn btn-primary" onClick={startMonitor} disabled={status.is_running}>
+          <button className="btn btn-primary" onClick={startMonitor} disabled={status.is_running || (sourceMode === 'ezviz' && (!selectedDevice || !selectedDevice.online))}>
             ▶ 启动监控
           </button>
           <button className="btn btn-danger" onClick={stopMonitor} disabled={!status.is_running}>
@@ -269,6 +513,39 @@ export default function App() {
             ↻ 重置基线
           </button>
         </div>
+      </div>
+
+      {/* ── 视频画面 ── */}
+      <div className="video-panel">
+        <div className="video-header">
+          <h3>实时画面</h3>
+          <div className="video-tabs" role="tablist" aria-label="视频画面">
+            <button type="button" role="tab" aria-selected={videoTab === 'analysis'} className={videoTab === 'analysis' ? 'active' : ''} onClick={() => setVideoTab('analysis')}>AI 分析画面</button>
+            <button type="button" role="tab" aria-selected={videoTab === 'raw'} className={videoTab === 'raw' ? 'active' : ''} onClick={() => setVideoTab('raw')} disabled={sourceMode !== 'ezviz'}>萤石原始画面</button>
+          </div>
+          <span className={`video-badge ${(videoTab === 'raw' ? playerState === 'playing' : status.is_running) ? 'live' : 'idle'}`}>
+            <span className="dot" />
+            {videoTab === 'raw'
+              ? (playerState === 'playing' ? '正在播放' : playerState === 'loading' ? '正在连接' : playerState === 'error' ? '播放失败' : '待启动')
+              : (status.is_running ? '监控中' : '待启动')}
+          </span>
+        </div>
+        <div className="video-container">
+          {videoTab === 'analysis' ? (
+            <>
+              <img ref={videoImgRef} alt="AI 分析实时画面" className="video-frame" />
+              {!status.is_running && <div className="video-placeholder"><span>点击「启动监控」开始查看分析画面</span></div>}
+            </>
+          ) : (
+            <>
+              {playerConfig
+                ? <EzvizPlayer active={videoTab === 'raw'} config={playerConfig} setPlayerState={setPlayerState} setPlayerError={setPlayerError} />
+                : <div className="video-placeholder"><span>选择在线设备并启动监控后显示原始画面</span></div>}
+              {playerState === 'error' && <div className="video-error" role="alert">{playerError}</div>}
+            </>
+          )}
+        </div>
+        {videoTab === 'raw' && selectedDeviceId && <div className="video-actions"><button className="btn btn-secondary" type="button" onClick={refreshPlayer}>{playerConfig ? '刷新播放授权' : '加载原始画面'}</button></div>}
       </div>
 
       {/* ── 风险等级大卡片 ── */}

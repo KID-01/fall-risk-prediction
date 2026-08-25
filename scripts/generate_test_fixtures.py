@@ -87,8 +87,9 @@ def generate_keypoints(output_dir: Path, labels_path: Path, samples: int, seq_le
 
 def generate_project_checkpoint(checkpoint_path: Path, seed: int) -> bool:
     try:
-        import torch
         import sys
+
+        import torch
 
         project_root = Path(__file__).resolve().parents[1]
         if str(project_root) not in sys.path:

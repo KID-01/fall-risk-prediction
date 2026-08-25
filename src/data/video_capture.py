@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import time
 from collections import deque
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 import cv2
 import numpy as np

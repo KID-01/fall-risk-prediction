@@ -4,14 +4,11 @@ FallRiskDataset: 加载关键点时序序列,返回 dict
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 
 from src.data.keypoint_store import KeypointStore
-from src.utils.config import get_config
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -136,8 +133,6 @@ class FallRiskDataset(Dataset):
 
         # 4. 时间缩放 (随机加速/减速)
         if np.random.random() < cfg.get("time_scale_prob", 0.3):
-            scale = np.random.uniform(0.8, 1.2)
-            new_len = max(1, int(kps.shape[0] * scale))
             kps = self._interpolate_time(kps, self.seq_len)
 
         return kps

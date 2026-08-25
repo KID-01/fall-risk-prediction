@@ -1,6 +1,6 @@
 """更新任务清单标记 — 2026-07-15 第二批"""
-from pathlib import Path
 import re
+from pathlib import Path
 
 html_path = Path(__file__).parent.parent / "docs" / "fall-risk-tech-tasks.html"
 html = html_path.read_text(encoding="utf-8")
@@ -29,9 +29,11 @@ for tid in done + partial:
     new_check = f'<div class="task-check {cls}"></div>'
     marker = f'task-id">{tid}</span>'
     idx = html.find(marker)
-    if idx < 0: continue
+    if idx < 0:
+        continue
     check_idx = html.rfind(old_check, 0, idx)
-    if check_idx < 0: continue
+    if check_idx < 0:
+        continue
     html = html[:check_idx] + new_check + html[check_idx + len(old_check):]
     print(f"  [OK] {tid} -> {cls}")
 
@@ -55,6 +57,6 @@ for line in lines:
     new_lines.append(line)
 md_path.write_text("\n".join(new_lines), encoding="utf-8")
 
-done_count = sum(1 for l in new_lines if "[✅]" in l)
-partial_count = sum(1 for l in new_lines if "[◐]" in l)
+done_count = sum(1 for line in new_lines if "[✅]" in line)
+partial_count = sum(1 for line in new_lines if "[◐]" in line)
 print(f"\n标记完成: ✅{done_count}个已完成, ◐{partial_count}个部分完成")

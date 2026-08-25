@@ -23,16 +23,18 @@ API 路由 (RESTful + WebSocket):
   WS   /ws/alerts                     WebSocket 实时告警推送
 """
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from omegaconf import OmegaConf
-from pathlib import Path
 
+from src.api.ezviz_routes import ezviz_router
 from src.api.routes import alerts_router, monitor_router, stats_router
-from src.api.websocket import websocket_endpoint
+from src.api.websocket import video_websocket_endpoint, websocket_endpoint
+from src.ezviz.client import create_client_from_config
 from src.utils.config import get_config
 from src.utils.logger import get_logger, setup_logging
 
@@ -46,8 +48,18 @@ config: Any = get_config()
 async def lifespan(app: FastAPI):
     """应用生命周期: 启动时初始化, 关闭时清理"""
     log.info("FastAPI 服务启动")
-    yield
-    log.info("FastAPI 服务关闭")
+    app.state.ezviz_client = None
+    try:
+        app.state.ezviz_client = create_client_from_config()
+        log.info("萤石配置已加载")
+    except Exception:
+        log.info("萤石配置未加载，设备接口暂不可用")
+    try:
+        yield
+    finally:
+        if app.state.ezviz_client is not None:
+            await app.state.ezviz_client.close()
+        log.info("FastAPI 服务关闭")
 
 
 # ── 创建应用 ──
@@ -69,11 +81,13 @@ app.add_middleware(
 
 # ── 注册路由 ──
 app.include_router(monitor_router)
+app.include_router(ezviz_router)
 app.include_router(alerts_router)
 app.include_router(stats_router)
 
 # ── WebSocket ──
 app.websocket("/ws/alerts")(websocket_endpoint)
+app.websocket("/ws/video")(video_websocket_endpoint)
 
 
 # ── 基础端点 ──

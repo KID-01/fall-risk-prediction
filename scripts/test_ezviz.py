@@ -3,15 +3,12 @@ T1.3 验证脚本 — 萤石开放平台 SDK 集成测试
 
 运行方式:
     cd e:\fengxian\fall-risk-prediction
-    venv\Scripts\python.exe scripts\test_ezviz.py
+    venv\\Scripts\\python.exe scripts\test_ezviz.py
 
 使用方法:
-    1. 先用浏览器登录 https://open.ys7.com
-       账号: 17398016396  密码: Tyc03140215.
-    2. 进入"控制台" → "我的应用" → "创建应用"
-    3. 复制 appKey 和 appSecret
-    4. 编辑 configs/ezviz.yaml，填入真实密钥
-    5. 运行本脚本验证
+    1. 登录 https://open.ys7.com 并进入"控制台" → "我的应用"
+    2. 将 appKey 和 appSecret 写入被 Git 忽略的 configs/ezviz.yaml
+    3. 运行本脚本验证
 """
 import asyncio
 import sys
