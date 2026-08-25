@@ -1,6 +1,7 @@
 """萤石设备发现、EZOpen 播放授权和一键监控启动接口。"""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from typing import Any
 
@@ -155,15 +156,16 @@ async def start_monitor(
     elif body.audio_source == "mic":
         audio_source = "mic"
     elif body.audio_source in ("auto", ""):
-        audio_source = None
+        # 自动模式: 优先尝试 RTSP (有独立音频流), 失败直接关音频, 不阻塞启动
+        audio_source = "off"
         try:
-            rtsp_url = await client.get_rtsp_url(serial, body.channel_no)
+            rtsp_url = await asyncio.wait_for(
+                client.get_rtsp_url(serial, body.channel_no), timeout=5.0
+            )
             if rtsp_url:
                 audio_source = rtsp_url
         except Exception:
             pass
-        if not audio_source:
-            audio_source = analysis_url
     else:
         audio_source = body.audio_source
 
