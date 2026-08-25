@@ -51,9 +51,10 @@ export default function AudioMonitor({ pipelineAudio }) {
     fetchStatus()
   }, [fetchStatus])
 
-  // 管线音频 Top-k 图表
+  // 管线/本地音频 Top-k 图表
   useEffect(() => {
-    const topLabels = pipelineAudio?.lastResult?.top_labels
+    const activeResult = pipelineAudio?.lastResult || results
+    const topLabels = activeResult?.top_labels
     if (!topLabels?.length || !pipelineChartRef.current) return
 
     const chart = echarts.init(pipelineChartRef.current)
@@ -108,7 +109,7 @@ export default function AudioMonitor({ pipelineAudio }) {
     const onResize = () => chart.resize()
     window.addEventListener('resize', onResize)
     return () => { chart.dispose(); window.removeEventListener('resize', onResize) }
-  }, [pipelineAudio?.lastResult?.top_labels])
+  }, [pipelineAudio?.lastResult?.top_labels, results?.top_labels])
 
   // 组件卸载时释放所有音频资源
   useEffect(() => {
@@ -210,8 +211,8 @@ export default function AudioMonitor({ pipelineAudio }) {
     if (chunk.length < 0.5 * sampleRate) return
 
     setLiveAnalyzing(true)
+    setError('')
     try {
-      // 编码为 WAV
       const { encodeWav } = await import('./audioUtils.js')
       const blob = encodeWav(new Float32Array(chunk), sampleRate)
 
@@ -223,11 +224,14 @@ export default function AudioMonitor({ pipelineAudio }) {
         body: formData,
       })
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail || `HTTP ${res.status}`)
+      }
       const data = await res.json()
       setResults(data)
     } catch (e) {
-      console.error('实时分析失败:', e)
+      setError(`实时分析失败: ${e.message}`)
     } finally {
       setLiveAnalyzing(false)
     }

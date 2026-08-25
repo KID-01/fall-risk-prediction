@@ -40,9 +40,13 @@ def get_analyzer() -> AudioAnalyzer:
 
 @audio_router.get("/status")
 async def audio_status() -> dict[str, Any]:
-    """返回音频分析配置与模型状态, 供前端展示功能可用性"""
     analyzer = get_analyzer()
     checkpoint_exists = Path(analyzer.checkpoint_path).expanduser().is_file()
+    if checkpoint_exists and analyzer.enabled and not analyzer.model_loaded:
+        try:
+            await asyncio.to_thread(analyzer._ensure_model)
+        except Exception as exc:
+            log.warning(f"模型预加载失败: {exc}")
     return {
         "enabled": analyzer.enabled,
         "model_type": analyzer.model_type,
