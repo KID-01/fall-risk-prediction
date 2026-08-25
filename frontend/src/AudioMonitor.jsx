@@ -12,7 +12,6 @@ export default function AudioMonitor({ pipelineAudio }) {
   const [liveAnalyzing, setLiveAnalyzing] = useState(false)
   const [micError, setMicError] = useState('')
 
-  const chartRef = useRef(null)
   const pipelineChartRef = useRef(null)
   const waveformRef = useRef(null)
   const audioContextRef = useRef(null)
@@ -128,61 +127,6 @@ export default function AudioMonitor({ pipelineAudio }) {
       }
     }
   }, [])
-
-  // ECharts Top-k 条形图
-  useEffect(() => {
-    if (!results?.top_labels?.length || !chartRef.current) return
-
-    const chart = echarts.init(chartRef.current)
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-    const textColor = isDark ? '#e2e8f0' : '#1e293b'
-    const mutedColor = isDark ? '#64748b' : '#94a3b8'
-
-    const labels = results.top_labels.map(([l]) => l)
-    const scores = results.top_labels.map(([, s]) => s)
-
-    chart.setOption({
-      tooltip: {
-        trigger: 'axis',
-        formatter: (params) => `${params[0].name}: ${params[0].value.toFixed(3)}`,
-      },
-      grid: { left: 10, right: 10, top: 10, bottom: 10 },
-      xAxis: {
-        type: 'value',
-        min: 0,
-        max: 1,
-        splitLine: { lineStyle: { color: isDark ? '#334155' : '#f1f5f9' } },
-        axisLabel: { fontSize: 11, color: mutedColor },
-      },
-      yAxis: {
-        type: 'category',
-        data: labels.reverse(),
-        axisLine: { lineStyle: { color: isDark ? '#475569' : '#e2e8f0' } },
-        axisLabel: { fontSize: 11, color: mutedColor },
-        axisTick: { show: false },
-      },
-      series: [{
-        type: 'bar',
-        data: scores.reverse(),
-        barHeight: '60%',
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#3b82f6' },
-            { offset: 1, color: '#60a5fa' },
-          ]),
-        },
-        label: {
-          show: true,
-          position: 'right',
-          formatter: '{c}',
-          fontSize: 11,
-          color: textColor,
-        },
-      }],
-    })
-
-    return () => chart.dispose()
-  }, [results])
 
   // 文件上传分析
   const handleFileUpload = async (e) => {
@@ -365,17 +309,6 @@ export default function AudioMonitor({ pipelineAudio }) {
     setLiveAnalyzing(false)
   }
 
-  // 格式化事件显示
-  const formatEvent = (event) => {
-    const categoryLabel = event.category === 'vocal_distress' ? '人声呼救' : '撞击声'
-    const color = event.category === 'vocal_distress' ? 'var(--orange)' : 'var(--red)'
-    return (
-      <span key={`${event.class_index}-${event.timestamp}`} className="event-badge" style={{ background: `${color}20`, color, borderColor: color }}>
-        [{categoryLabel}] {event.label} ({event.score.toFixed(2)}) @ {event.timestamp.toFixed(1)}s
-      </span>
-    )
-  }
-
   return (
     <div className="audio-monitor">
       {/* ── 状态栏 ── */}
@@ -424,96 +357,97 @@ export default function AudioMonitor({ pipelineAudio }) {
       {micError && <div className="audio-error">{micError}</div>}
       {error && <div className="audio-error">{error}</div>}
 
-      {/* ── 管线实时音频监测 ── */}
+      {/* ── 音频分析结果 ── */}
       <div className="pipeline-audio-section">
         <div className="pipeline-audio-header">
-          <h4>管线实时监测</h4>
+          <h4>音频分析结果</h4>
           {pipelineAudio?.enabled && (
             <span className="pipeline-audio-live">
-              <span className="live-dot" /> 监测中
+              <span className="live-dot" /> 管线监测中
             </span>
+          )}
+          {!pipelineAudio?.enabled && results && (
+            <span className="pipeline-audio-source-tag">本地分析</span>
           )}
         </div>
 
-        {!pipelineAudio?.enabled && (
-          <div className="audio-empty">
-            <span className="empty-icon">🔇</span>
-            <span>音频监测未启用，请在监控设置中开启音频</span>
-          </div>
-        )}
-
-        {pipelineAudio?.enabled && (
-          <div className="pipeline-audio-content">
-            <div className="pipeline-audio-meta">
-              <div className="pipeline-audio-source">
-                <span className="meta-label">音频来源</span>
-                <span className="meta-value">{pipelineAudio.source || '未知'}</span>
-              </div>
-              <div className="pipeline-audio-chunks">
-                <span className="meta-label">已处理</span>
-                <span className="meta-value">{pipelineAudio.chunksProcessed || 0} 块</span>
-              </div>
-              {pipelineAudio.lastResult && (
-                <>
-                  <div className="pipeline-audio-duration">
-                    <span className="meta-label">最近分析</span>
-                    <span className="meta-value">{pipelineAudio.lastResult.duration_sec?.toFixed(1)}s</span>
-                  </div>
-                  <div className="pipeline-audio-time">
-                    <span className="meta-label">耗时</span>
-                    <span className="meta-value">{pipelineAudio.lastResult.elapsed_ms?.toFixed(0)}ms</span>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {pipelineAudio.error && (
-              <div className="pipeline-audio-error">
-                <span className="error-icon">⚠️</span> {pipelineAudio.error}
-              </div>
-            )}
-
-            {pipelineAudio.lastResult?.events?.length > 0 && (
-              <div className="pipeline-audio-events">
-                <h5>检测到的声音事件</h5>
-                <div className="events-list">
-                  {pipelineAudio.lastResult.events.map((event, i) => {
-                    const catLabel = event.category === 'vocal_distress' ? '人声' : '撞击'
-                    const catColor = event.category === 'vocal_distress' ? 'var(--orange)' : 'var(--red)'
-                    return (
-                      <span
-                        key={`${event.class_index}-${i}`}
-                        className="event-badge"
-                        style={{ background: `${catColor}20`, color: catColor, borderColor: catColor }}
-                      >
-                        [{catLabel}] {event.label} ({event.score.toFixed(2)})
-                      </span>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {pipelineAudio.lastResult?.top_labels?.length > 0 && (
-              <div className="pipeline-audio-topk">
-                <h5>声音标签分布</h5>
-                <div ref={pipelineChartRef} className="audio-chart" style={{ height: '220px' }} />
-              </div>
-            )}
-
-            {!pipelineAudio.lastResult && pipelineAudio.chunksProcessed === 0 && (
+        {(() => {
+          const activeResult = pipelineAudio?.lastResult || results
+          if (!activeResult) {
+            return (
               <div className="audio-empty">
                 <span className="empty-icon">🎧</span>
-                <span>等待音频数据...</span>
+                <span>{pipelineAudio?.enabled ? '等待音频数据...' : '上传音频或开始录音查看分析结果'}</span>
               </div>
-            )}
-          </div>
-        )}
-      </div>
+            )
+          }
 
-      {/* ── 手动分析 / 麦克风 ── */}
-      <div className="audio-toolbar">
-        <h4>手动音频分析</h4>
+          return (
+            <div className="pipeline-audio-content">
+              <div className="pipeline-audio-meta">
+                {pipelineAudio?.enabled ? (
+                  <div className="pipeline-audio-source">
+                    <span className="meta-label">音频来源</span>
+                    <span className="meta-value">{pipelineAudio.source || '未知'}</span>
+                  </div>
+                ) : (
+                  <div className="pipeline-audio-source">
+                    <span className="meta-label">分析来源</span>
+                    <span className="meta-value">本地 {recording ? '麦克风' : '文件上传'}</span>
+                  </div>
+                )}
+                <div className="pipeline-audio-duration">
+                  <span className="meta-label">音频时长</span>
+                  <span className="meta-value">{activeResult.duration_sec?.toFixed(1)}s</span>
+                </div>
+                <div className="pipeline-audio-time">
+                  <span className="meta-label">分析耗时</span>
+                  <span className="meta-value">{activeResult.elapsed_ms?.toFixed(0)}ms</span>
+                </div>
+                {pipelineAudio?.enabled && (
+                  <div className="pipeline-audio-chunks">
+                    <span className="meta-label">已处理</span>
+                    <span className="meta-value">{pipelineAudio.chunksProcessed || 0} 块</span>
+                  </div>
+                )}
+              </div>
+
+              {pipelineAudio?.error && (
+                <div className="pipeline-audio-error">
+                  <span className="error-icon">⚠️</span> {pipelineAudio.error}
+                </div>
+              )}
+
+              {activeResult.events?.length > 0 && (
+                <div className="pipeline-audio-events">
+                  <h5>检测到的声音事件 ({activeResult.events.length})</h5>
+                  <div className="events-list">
+                    {activeResult.events.map((event, i) => {
+                      const catLabel = event.category === 'vocal_distress' ? '人声' : '撞击'
+                      const catColor = event.category === 'vocal_distress' ? 'var(--orange)' : 'var(--red)'
+                      return (
+                        <span
+                          key={`${event.class_index}-${i}`}
+                          className="event-badge"
+                          style={{ background: `${catColor}20`, color: catColor, borderColor: catColor }}
+                        >
+                          [{catLabel}] {event.label} ({event.score.toFixed(2)})
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {activeResult.top_labels?.length > 0 && (
+                <div className="pipeline-audio-topk">
+                  <h5>声音标签分布</h5>
+                  <div ref={pipelineChartRef} className="audio-chart" style={{ height: '220px' }} />
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
 
       {/* ── 配置面板 ── */}
@@ -539,40 +473,6 @@ export default function AudioMonitor({ pipelineAudio }) {
           height={120}
           style={{ width: '100%', height: '120px', background: 'var(--chart-bg)' }}
         />
-      </div>
-
-      {/* ── 分析结果 ── */}
-      <div className="audio-results">
-        {results && (
-          <>
-            <div className="results-meta">
-              <div>时长: {results.duration_sec.toFixed(2)}s</div>
-              <div>耗时: {results.elapsed_ms.toFixed(1)}ms</div>
-            </div>
-
-            {results.events.length > 0 && (
-              <div className="audio-events">
-                <h4>检测到的事件 ({results.events.length})</h4>
-                <div className="events-list">
-                  {results.events.map(formatEvent)}
-                </div>
-              </div>
-            )}
-
-            {results.top_labels.length > 0 && (
-              <div className="audio-top-labels">
-                <h4>Top 标签</h4>
-                <div ref={chartRef} className="audio-chart" style={{ height: '280px' }} />
-              </div>
-            )}
-          </>
-        )}
-        {!results && !uploading && !liveAnalyzing && (
-          <div className="audio-empty">
-            <span className="empty-icon">🎧</span>
-            <span>上传音频文件或点击「开始实时监测」查看分析结果</span>
-          </div>
-        )}
       </div>
     </div>
   )

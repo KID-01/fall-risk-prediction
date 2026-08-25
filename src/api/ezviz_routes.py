@@ -149,11 +149,21 @@ async def start_monitor(
     if not analysis_url:
         raise HTTPException(status_code=502, detail="未获取到可供分析的 RTMP/RTSP 地址")
 
+    audio_source = None
+    try:
+        rtsp_url = await client.get_rtsp_url(serial, body.channel_no)
+        if rtsp_url:
+            audio_source = rtsp_url
+    except Exception:
+        pass
+    if not audio_source:
+        audio_source = analysis_url
+
     if not monitor.start(
         source=analysis_url,
         person_id=body.person_id,
         device_id=body.device_id,
-        audio_source=analysis_url,
+        audio_source=audio_source,
     ):
         raise HTTPException(status_code=500, detail="后端监控启动失败")
     response.headers["Cache-Control"] = "no-store"

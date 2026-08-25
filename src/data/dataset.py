@@ -97,13 +97,13 @@ class FallRiskDataset(Dataset):
 
     def _sample_sequence(self, kps: np.ndarray, seq_len: int) -> np.ndarray:
         """时序采样: 随机起点截取固定长度窗口,不足则重复padding"""
-        t = kps.shape[0]
-        if t >= seq_len:
-            start = np.random.randint(0, t - seq_len + 1)
+        T = kps.shape[0]
+        if T >= seq_len:
+            start = np.random.randint(0, T - seq_len + 1)
             return kps[start : start + seq_len]
         else:
             # 不足则循环重复
-            repeats = (seq_len // t) + 1
+            repeats = (seq_len // T) + 1
             kps_repeated = np.tile(kps, (repeats, 1, 1))[:seq_len]
             return kps_repeated
 
@@ -148,16 +148,16 @@ class FallRiskDataset(Dataset):
 
     def _interpolate_time(self, kps: np.ndarray, target_len: int) -> np.ndarray:
         """时间维度线性插值"""
-        t = kps.shape[0]
-        if t == target_len:
+        T = kps.shape[0]
+        if T == target_len:
             return kps
         # 为每个关键点的每个坐标做插值
         result = np.zeros((target_len, kps.shape[1], kps.shape[2]), dtype=kps.dtype)
         for j in range(kps.shape[1]):
             for c in range(kps.shape[2]):
                 result[:, j, c] = np.interp(
-                    np.linspace(0, t - 1, target_len),
-                    np.arange(t),
+                    np.linspace(0, T - 1, target_len),
+                    np.arange(T),
                     kps[:, j, c],
                 )
         return result

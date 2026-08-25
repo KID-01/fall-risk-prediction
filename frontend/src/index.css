@@ -1038,6 +1038,15 @@ body {
   color: var(--green);
 }
 
+.pipeline-audio-source-tag {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+}
+
 .live-dot {
   width: 8px;
   height: 8px;
