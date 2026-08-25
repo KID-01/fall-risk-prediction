@@ -353,7 +353,7 @@ export default function AudioMonitor({ pipelineAudio }) {
             onClick={recording ? stopRecording : startRecording}
             disabled={uploading}
           >
-            {recording ? '■ 停止录音' : '🎤 开始实时监测'}
+            {recording ? '■ 停止录音' : '开始实时监测'}
           </button>
         </div>
       </div>
