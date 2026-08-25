@@ -70,7 +70,7 @@ export default function AudioMonitor({ pipelineAudio }) {
         trigger: 'axis',
         formatter: (params) => `${params[0].name}: ${params[0].value.toFixed(3)}`,
       },
-      grid: { left: 10, right: 30, top: 10, bottom: 10 },
+      grid: { left: 10, right: 40, top: 10, bottom: 10, containLabel: true },
       xAxis: {
         type: 'value',
         min: 0,
@@ -81,7 +81,7 @@ export default function AudioMonitor({ pipelineAudio }) {
       yAxis: {
         type: 'category',
         data: [...labels].reverse(),
-        axisLabel: { fontSize: 11, color: textColor, width: 140, overflow: 'truncate' },
+        axisLabel: { fontSize: 11, color: textColor },
         axisTick: { show: false },
         axisLine: { show: false },
       },
