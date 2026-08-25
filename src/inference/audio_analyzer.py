@@ -59,6 +59,40 @@ IMPACT_LABELS: dict[int, str] = {
     470: "Breaking",
 }
 
+# 日常场景常见类的中文映射 (AudioSet 527 类索引)
+COMMON_LABELS: dict[int, str] = {
+    0: "说话声",
+    1: "男声",
+    2: "女声",
+    3: "对话",
+    6: "耳语",
+    13: "笑声",
+    26: "叹气",
+    27: "唱歌",
+    46: "脚步声",
+    47: "跑步声",
+    66: "拍手",
+    106: "开门/关门",
+    107: "门铃",
+    127: "钟表声",
+    137: "闹钟",
+    156: "汽车",
+    164: "音乐",
+    174: "电话铃",
+    192: "狗叫",
+    207: "猫叫",
+    292: "雨声",
+    301: "风声",
+    314: "雷声",
+    327: "水流声",
+    354: "敲击键盘",
+    355: "鼠标点击",
+    420: "空调",
+    426: "风扇",
+    444: "吸尘器",
+    451: "洗衣机",
+}
+
 
 class SoundCategory(Enum):
     """声音事件类别"""
@@ -208,7 +242,7 @@ class AudioAnalyzer:
                     events.append(
                         AudioEvent(
                             category=SoundCategory.VOCAL_DISTRESS,
-                            label=VOCAL_DISTRESS_LABELS.get(idx, f"class_{idx}"),
+                            label=VOCAL_DISTRESS_LABELS.get(idx, f"类别{idx}"),
                             class_index=idx,
                             score=score,
                             timestamp=timestamp,
@@ -219,7 +253,7 @@ class AudioAnalyzer:
                     events.append(
                         AudioEvent(
                             category=SoundCategory.IMPACT,
-                            label=IMPACT_LABELS.get(idx, f"class_{idx}"),
+                            label=IMPACT_LABELS.get(idx, f"类别{idx}"),
                             class_index=idx,
                             score=score,
                             timestamp=timestamp,
@@ -228,7 +262,6 @@ class AudioAnalyzer:
         return events
 
     def _build_top_labels(self, scores: np.ndarray) -> list[tuple[str, float]]:
-        """全局 top_k 标签, (label, score) 降序, 仅保留超过最低分数的"""
         candidates: list[tuple[str, float]] = []
         for idx, score in enumerate(scores):
             if float(score) < self.min_event_score:
@@ -236,7 +269,8 @@ class AudioAnalyzer:
             label = (
                 VOCAL_DISTRESS_LABELS.get(idx)
                 or IMPACT_LABELS.get(idx)
-                or str(idx)
+                or COMMON_LABELS.get(idx)
+                or f"类别{idx}"
             )
             candidates.append((label, float(score)))
         candidates.sort(key=lambda item: item[1], reverse=True)

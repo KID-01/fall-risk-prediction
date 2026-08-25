@@ -698,9 +698,9 @@ svg { display: inline-block; vertical-align: middle; }
   border-radius: var(--fr-radius-md);
   border: 1px solid var(--fr-border);
 }
-.pipeline-audio-meta > div { display: flex; flex-direction: column; gap: 4px; }
+.pipeline-audio-meta > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .pipeline-audio-meta .meta-label { font-size: 12px; color: var(--fr-muted-foreground); }
-.pipeline-audio-meta .meta-value { font-size: 14px; font-weight: 600; color: var(--fr-foreground); font-family: var(--fr-font-mono); }
+.pipeline-audio-meta .meta-value { font-size: 14px; font-weight: 600; color: var(--fr-foreground); font-family: var(--fr-font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pipeline-audio-error {
   display: flex;
   align-items: center;
