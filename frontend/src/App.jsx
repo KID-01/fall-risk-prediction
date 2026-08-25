@@ -568,8 +568,9 @@ export default function App() {
               aria-label="音频源"
             >
               <option value="auto">音频: 自动(跟随视频源)</option>
-              <option value="off">音频: 关闭</option>
+              <option value="camera">音频: 监控收音</option>
               <option value="mic">音频: 麦克风</option>
+              <option value="off">音频: 关闭</option>
             </select>
           </div>
         </div>

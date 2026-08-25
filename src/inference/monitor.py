@@ -127,6 +127,13 @@ class FallRiskMonitor:
                 effective_audio_source = source
             else:
                 effective_audio_source = "off"
+        elif effective_audio_source == "camera":
+            src_lower = source.lower()
+            if src_lower.startswith(("rtsp://", "rtmp://")):
+                effective_audio_source = source
+            else:
+                log.error("监控收音模式要求视频源为 RTSP/RTMP 地址")
+                return False
 
         audio_enabled = audio_cfg_enabled and effective_audio_source not in ("off", "")
 
