@@ -280,9 +280,8 @@ export default function AudioMonitor({
       // 不停后端监控，只停止音频
     } else {
       if (!isRunning) {
-        // 启动后端监控 (带音频)
-        setAudioSource('video_source')
-        startMonitor({ stayOnTab: true })
+        // 启动后端监控 (带音频) — 直接传值避免 React state 批量更新延迟
+        startMonitor({ stayOnTab: true, audioSource: 'video_source' })
       }
       setMonitorMode('video')
     }

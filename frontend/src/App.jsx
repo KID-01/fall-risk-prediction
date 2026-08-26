@@ -339,9 +339,10 @@ export default function App() {
   }, [riskHistory, theme])
 
   // ── 控制操作 ──
-  const startMonitor = async ({ stayOnTab } = {}) => {
+  const startMonitor = async ({ stayOnTab, audioSource: audioSourceOverride } = {}) => {
+    const effectiveAudioSource = audioSourceOverride || audioSource
     localStorage.setItem('monitor_person_id', personId)
-    localStorage.setItem('monitor_audio_source', audioSource)
+    localStorage.setItem('monitor_audio_source', effectiveAudioSource)
     setControlError('')
     setPlayerError('')
 
@@ -362,7 +363,7 @@ export default function App() {
             device_id: selectedDeviceId,
             channel_no: Number(channelNo),
             person_id: personId,
-            audio_source: audioSource,
+            audio_source: effectiveAudioSource,
           }),
         })
       } else {
@@ -373,7 +374,7 @@ export default function App() {
         localStorage.setItem('monitor_source', source)
         response = await fetch(`${API_BASE}/stream/start`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, person_id: personId, audio_source: audioSource }),
+          body: JSON.stringify({ source, person_id: personId, audio_source: effectiveAudioSource }),
         })
       }
 
