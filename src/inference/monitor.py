@@ -304,6 +304,8 @@ class FallRiskMonitor:
         device_id = self.device_id
 
         try:
+            baseline = self.baseline_manager.load_baseline(person_id)
+
             with self.audio_capture:
                 for chunk in self.audio_capture.chunks():
                     if self._stop_flag.is_set():
@@ -317,15 +319,11 @@ class FallRiskMonitor:
                         self.status.audio_chunks_processed += 1
 
                         if result.events:
-                            # 独立评估音频告警, 不依赖视频循环
-                            baseline = self.baseline_manager.load_baseline(person_id)
                             if not baseline or not baseline.is_ready:
                                 audio_alert = self.alert_engine.evaluate_audio_only(
                                     result.events, chunk.timestamp,
                                 )
-                                self.status.last_alert = audio_alert
                                 if audio_alert.level != RiskLevel.LOW:
-                                    self.status.current_risk_level = audio_alert.level
                                     try:
                                         db = Database()
                                         db.insert_alert_event(
@@ -338,7 +336,6 @@ class FallRiskMonitor:
                                     except Exception as e:
                                         log.error(f"音频告警持久化失败: {e}")
 
-                            # 音频事件独立入库
                             try:
                                 db = Database()
                                 db.insert_audio_events(
