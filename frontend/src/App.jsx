@@ -363,7 +363,7 @@ export default function App() {
   }, [riskHistory, theme])
 
   // ── 控制操作 ──
-  const startMonitor = async () => {
+  const startMonitor = async ({ stayOnTab } = {}) => {
     localStorage.setItem('monitor_person_id', personId)
     localStorage.setItem('monitor_audio_source', audioSource)
     setControlError('')
@@ -407,7 +407,7 @@ export default function App() {
       }
       if (sourceMode === 'ezviz') setPlayerConfig(await response.json())
       else setPlayerConfig(null)
-      if (videoTab !== 'analysis') setVideoTab('analysis')
+      if (!stayOnTab && videoTab !== 'analysis') setVideoTab('analysis')
       fetchStatus()
     } catch (_) {
       setControlError('无法连接后端服务，请确认 FastAPI 已启动')
@@ -643,6 +643,20 @@ export default function App() {
                 lastResult: status.last_audio_result,
                 lastAlert: status.last_alert,
               }}
+              isRunning={status.is_running}
+              startMonitor={startMonitor}
+              stopMonitor={stopMonitor}
+              devices={devices}
+              selectedDeviceId={selectedDeviceId}
+              setSelectedDeviceId={setSelectedDeviceId}
+              selectedDevice={selectedDevice}
+              sourceMode={sourceMode}
+              source={source}
+              channelNo={channelNo}
+              setChannelNo={setChannelNo}
+              devicesLoading={devicesLoading}
+              audioSource={audioSource}
+              setAudioSource={setAudioSource}
             />
           )}
         </div>

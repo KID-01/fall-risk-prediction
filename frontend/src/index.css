@@ -619,6 +619,52 @@ svg { display: inline-block; vertical-align: middle; }
   border-radius: 4px;
 }
 
+.audio-video-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  color: rgba(255,255,255,0.7);
+  font-size: 13px;
+}
+
+/* 视频源设备选择 */
+.audio-device-select {
+  padding: 12px 16px;
+  background: var(--fr-surface);
+  border-radius: var(--fr-radius-md);
+  border: 1px solid var(--fr-border);
+}
+.audio-device-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.audio-channel-select { max-width: 140px; }
+.audio-source-url {
+  font-size: 13px;
+  color: var(--fr-muted-foreground);
+  font-family: var(--fr-font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 音频监测状态标签 */
+.audio-live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fr-state-success);
+  background: var(--fr-success-soft);
+}
+
 .audio-toolbar {
   display: flex;
   justify-content: space-between;
