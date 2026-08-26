@@ -246,30 +246,10 @@ class FallRiskMonitor:
                             self.status.baseline_ready = baseline.is_ready
                             self.status.baseline_samples = baseline.sample_count
 
-                        # 阶段7: 从音频线程排空待处理事件（无论基线是否就绪）
+                        # 从音频线程排空待处理事件, 用于视频偏差联合评估
                         with self.status._audio_lock:
                             pending_events = list(self.status._pending_audio_events)
                             self.status._pending_audio_events.clear()
-
-                        # 基线未就绪时, 纯音频事件仍触发预警(无需视频偏差)
-                        if not baseline.is_ready and pending_events:
-                            audio_alert = self.alert_engine.evaluate_audio_only(
-                                pending_events, feature.timestamp,
-                            )
-                            self.status.last_alert = audio_alert
-                            if audio_alert.level != RiskLevel.LOW:
-                                self.status.current_risk_level = audio_alert.level
-                                try:
-                                    db = Database()
-                                    db.insert_alert_event(
-                                        alert_level=audio_alert.level.value,
-                                        message=audio_alert.message,
-                                        risk_score=0,
-                                        person_id=person_id,
-                                        device_id=device_id,
-                                    )
-                                except Exception as e:
-                                    log.error(f"音频告警持久化失败: {e}")
 
                         if baseline.is_ready:
                             deviation = self.deviation_detector.check(feature, baseline)
@@ -308,18 +288,6 @@ class FallRiskMonitor:
                             except Exception as e:
                                 log.error(f"持久化失败: {e}")
 
-                        # 音频事件入库(独立于视频偏差逻辑)
-                        if pending_events:
-                            try:
-                                db = Database()
-                                db.insert_audio_events(
-                                    pending_events,
-                                    person_id=person_id,
-                                    device_id=device_id,
-                                )
-                            except Exception as e:
-                                log.error(f"音频事件持久化失败: {e}")
-
                     time.sleep(inference_interval)
         except Exception as e:
             log.error(f"监控线程异常: {e}")
@@ -331,6 +299,9 @@ class FallRiskMonitor:
         """音频采集+分析循环(独立线程, 与视频并行)"""
         if self.audio_capture is None or self.audio_analyzer is None:
             return
+
+        person_id = self.person_id
+        device_id = self.device_id
 
         try:
             with self.audio_capture:
@@ -346,10 +317,37 @@ class FallRiskMonitor:
                         self.status.audio_chunks_processed += 1
 
                         if result.events:
-                            with self.status._audio_lock:
-                                self.status._pending_audio_events.extend(result.events)
-                                if len(self.status._pending_audio_events) > 100:
-                                    self.status._pending_audio_events = self.status._pending_audio_events[-100:]
+                            # 独立评估音频告警, 不依赖视频循环
+                            baseline = self.baseline_manager.load_baseline(person_id)
+                            if not baseline or not baseline.is_ready:
+                                audio_alert = self.alert_engine.evaluate_audio_only(
+                                    result.events, chunk.timestamp,
+                                )
+                                self.status.last_alert = audio_alert
+                                if audio_alert.level != RiskLevel.LOW:
+                                    self.status.current_risk_level = audio_alert.level
+                                    try:
+                                        db = Database()
+                                        db.insert_alert_event(
+                                            alert_level=audio_alert.level.value,
+                                            message=audio_alert.message,
+                                            risk_score=0,
+                                            person_id=person_id,
+                                            device_id=device_id,
+                                        )
+                                    except Exception as e:
+                                        log.error(f"音频告警持久化失败: {e}")
+
+                            # 音频事件独立入库
+                            try:
+                                db = Database()
+                                db.insert_audio_events(
+                                    result.events,
+                                    person_id=person_id,
+                                    device_id=device_id,
+                                )
+                            except Exception as e:
+                                log.error(f"音频事件持久化失败: {e}")
 
                     except Exception as e:
                         self.status.audio_error = str(e)

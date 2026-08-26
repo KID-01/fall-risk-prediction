@@ -213,12 +213,19 @@ class AudioCapture:
             self._mic_stream = None
 
         if self._ffmpeg_proc is not None:
+            # 先关闭 stdout 解除阻塞读取, 再终止进程
+            try:
+                if self._ffmpeg_proc.stdout:
+                    self._ffmpeg_proc.stdout.close()
+            except Exception:
+                pass
             try:
                 self._ffmpeg_proc.terminate()
                 self._ffmpeg_proc.wait(timeout=2)
             except Exception:
                 try:
                     self._ffmpeg_proc.kill()
+                    self._ffmpeg_proc.wait(timeout=1)
                 except Exception:
                     pass
             self._ffmpeg_proc = None
