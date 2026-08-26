@@ -148,7 +148,7 @@ class AudioCapture:
         try:
             if src == "mic":
                 return self._open_mic()
-            elif src.startswith("rtsp://") or src.startswith("rtmp://"):
+            elif "://" in src:
                 return self._open_network_stream()
             elif src == "auto" or src == "off":
                 log.info(f"音频源 '{src}' 暂不直接打开, 由 monitor.py 决定")
@@ -173,7 +173,7 @@ class AudioCapture:
         # 根据源类型分发
         if self.source.lower() == "mic":
             return self._read_mic_chunk()
-        elif self.source.lower().startswith("rtsp://") or self.source.lower().startswith("rtmp://"):
+        elif "://" in self.source.lower():
             return self._read_rtsp_chunk()
         elif self.source.lower() == "auto" or self.source.lower() == "off":
             return None  # auto/off 由 monitor 处理
@@ -188,6 +188,7 @@ class AudioCapture:
 
         self._start_time = time.time()
         self._total_read_sec = 0.0
+        self._base_timestamp = time.time()
 
         try:
             while not self.stop_event.is_set():
@@ -212,12 +213,19 @@ class AudioCapture:
             self._mic_stream = None
 
         if self._ffmpeg_proc is not None:
+            # 先关闭 stdout 解除阻塞读取, 再终止进程
+            try:
+                if self._ffmpeg_proc.stdout:
+                    self._ffmpeg_proc.stdout.close()
+            except Exception:
+                pass
             try:
                 self._ffmpeg_proc.terminate()
                 self._ffmpeg_proc.wait(timeout=2)
             except Exception:
                 try:
                     self._ffmpeg_proc.kill()
+                    self._ffmpeg_proc.wait(timeout=1)
                 except Exception:
                     pass
             self._ffmpeg_proc = None
@@ -280,16 +288,22 @@ class AudioCapture:
             return False
 
     def _open_network_stream(self) -> bool:
-        """打开 RTSP/RTMP 网络音频流 (通过 ffmpeg 解码为 PCM s16le stdout)"""
-        if not which(self.ffmpeg_path):
+        """打开 RTSP/RTMP/HTTP-FLV 网络音频流 (通过 ffmpeg 解码为 PCM s16le stdout)"""
+        # 绝对路径用 isfile 检查, 否则用 which 从 PATH 查找
+        ffmpeg_ok = (
+            os.path.isfile(self.ffmpeg_path)
+            if os.sep in self.ffmpeg_path or self.ffmpeg_path.startswith(("C:", "/"))
+            else bool(which(self.ffmpeg_path))
+        )
+        if not ffmpeg_ok:
             log.error(f"ffmpeg 不存在: {self.ffmpeg_path}")
             return False
 
         is_rtmp = self.source.lower().startswith("rtmp://")
+        is_rtsp = self.source.lower().startswith("rtsp://")
 
-        # RTSP 用 tcp 传输避免 UDP 丢包; RTMP 不需要此参数
         input_opts = ["-nostdin"]
-        if not is_rtmp:
+        if is_rtsp:
             input_opts.extend(["-rtsp_transport", "tcp"])
 
         cmd = [
@@ -390,7 +404,7 @@ class AudioCapture:
         if wave.ndim == 2:
             wave = wave.mean(axis=1)
 
-        timestamp = self._total_read_sec
+        timestamp = self._base_timestamp + self._total_read_sec
         self._total_read_sec += accumulated_samples / self.sample_rate
         duration = accumulated_samples / self.sample_rate
 
@@ -430,7 +444,7 @@ class AudioCapture:
         # s16le -> float32 mono
         wave = np.frombuffer(accumulated, dtype=np.int16).astype(np.float32) / 32768.0
 
-        timestamp = self._total_read_sec
+        timestamp = self._base_timestamp + self._total_read_sec
         self._total_read_sec += len(wave) / self.sample_rate
         duration = len(wave) / self.sample_rate
 
@@ -462,7 +476,7 @@ class AudioCapture:
         # 归一化: float32 mono + 目标采样率
         wave = _to_float32_mono(data, src_sr, self.sample_rate)
 
-        timestamp = self._total_read_sec
+        timestamp = self._base_timestamp + self._total_read_sec
         self._total_read_sec += len(wave) / self.sample_rate
         duration = len(wave) / self.sample_rate
 

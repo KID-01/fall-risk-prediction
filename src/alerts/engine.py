@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -95,6 +96,7 @@ class AlertEngine:
             RiskLevel.CRITICAL: [],
         }
         self._event_log: list[AlertEvent] = []
+        self._event_log_lock = threading.Lock()
 
     def register_action(self, level: RiskLevel, action: AlertAction):
         """注册某等级的响应动作"""
@@ -105,7 +107,8 @@ class AlertEngine:
         self._short_term_count_hourly = 0
         self._last_reset_time = 0.0
         self._last_activity_time = 0.0
-        self._event_log.clear()
+        with self._event_log_lock:
+            self._event_log.clear()
 
     def evaluate(
         self,
@@ -200,7 +203,8 @@ class AlertEngine:
                 except Exception as e:
                     event.message += f" [通知失败: {e}]"
 
-        self._event_log.append(event)
+        with self._event_log_lock:
+            self._event_log.append(event)
         return event
 
     def evaluate_audio_only(
@@ -232,7 +236,8 @@ class AlertEngine:
                 except Exception as e:
                     alert.message += f" [通知失败: {e}]"
 
-        self._event_log.append(alert)
+        with self._event_log_lock:
+            self._event_log.append(alert)
         return alert
 
     def get_events(
@@ -241,13 +246,15 @@ class AlertEngine:
         limit: int = 100,
     ) -> list[AlertEvent]:
         """获取预警事件历史"""
-        events = self._event_log
+        with self._event_log_lock:
+            events = list(self._event_log)
         if level is not None:
             events = [e for e in events if e.level == level]
         return events[-limit:]
 
     def get_current_level(self) -> RiskLevel:
         """获取当前风险等级(最近一次评估)"""
-        if not self._event_log:
-            return RiskLevel.LOW
-        return self._event_log[-1].level
+        with self._event_log_lock:
+            if not self._event_log:
+                return RiskLevel.LOW
+            return self._event_log[-1].level

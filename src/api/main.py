@@ -37,7 +37,11 @@ from omegaconf import OmegaConf
 from src.api.audio_routes import audio_router
 from src.api.ezviz_routes import ezviz_router
 from src.api.routes import alerts_router, audio_events_router, monitor_router, stats_router
-from src.api.websocket import video_websocket_endpoint, websocket_endpoint
+from src.api.websocket import (
+    raw_video_websocket_endpoint,
+    video_websocket_endpoint,
+    websocket_endpoint,
+)
 from src.ezviz.client import create_client_from_config
 from src.utils.config import get_config
 from src.utils.logger import get_logger, setup_logging
@@ -94,6 +98,7 @@ app.include_router(stats_router)
 # ── WebSocket ──
 app.websocket("/ws/alerts")(websocket_endpoint)
 app.websocket("/ws/video")(video_websocket_endpoint)
+app.websocket("/ws/video/raw")(raw_video_websocket_endpoint)
 
 
 # ── 基础端点 ──

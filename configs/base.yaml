@@ -162,7 +162,7 @@ audio:
   # 音频源配置
   source: "auto"                         # auto | mic | off | rtsp://... | 文件路径
   input_device: null                     # sounddevice 输入设备编号 (null=系统默认)
-  ffmpeg_path: ""                        # RTSP音频解码用 ffmpeg 路径 (空=从PATH查找)
+  ffmpeg_path: "C:/Users/shiqi/scoop/apps/ffmpeg/current/bin/ffmpeg.exe"  # RTSP音频解码用 ffmpeg 路径 (空=从PATH查找)
 
 # ── 模型参数 (FallRiskPredictor) ──
 model:
