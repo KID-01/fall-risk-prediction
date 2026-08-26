@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import * as echarts from 'echarts'
 import AudioMonitor from './AudioMonitor'
+import EzvizPlayer from './EzvizPlayer'
 import { Shield, Moon, Sun, RefreshCw, Play, Square, RotateCcw, AlertTriangle, MonitorPlay, Video, Bell, ChartLine, AudioLines, Loader } from './icons'
 
 const API_BASE = '/api/v1'
@@ -21,63 +22,6 @@ function hexToRgba(hex, alpha) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim())
   if (!m) return hex
   return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${alpha})`
-}
-
-function EzvizPlayer({ active, config, setPlayerState, setPlayerError }) {
-  const hostRef = useRef(null)
-
-  useEffect(() => {
-    if (!active || !config || !hostRef.current) return undefined
-
-    let cancelled = false
-    let player
-    setPlayerState('loading')
-    setPlayerError('')
-
-    import('ezuikit-js')
-      .then(({ EZUIKitPlayer }) => {
-        if (cancelled || !hostRef.current) return
-        const width = Math.max(320, Math.floor(hostRef.current.clientWidth))
-        player = new EZUIKitPlayer({
-          id: 'ezviz-player',
-          accessToken: config.accessToken,
-          url: config.url,
-          width,
-          height: Math.floor(width * 9 / 16),
-          template: 'pcLive',
-          audio: false,
-          handleSuccess: () => {
-            if (!cancelled) setPlayerState('playing')
-          },
-          handleError: error => {
-            if (cancelled) return
-            console.error('EZUIKit 播放失败', error)
-            const encrypted = error?.type === 'handleRunTimeInfoError' && error?.data?.nErrorCode === 5
-            setPlayerState('error')
-            setPlayerError(encrypted
-              ? '设备已启用视频加密，需要设备验证码。'
-              : '萤石视频播放失败，请确认设备在线并刷新播放授权。')
-          },
-        })
-      })
-      .catch(error => {
-        if (cancelled) return
-        console.error('EZUIKit 初始化失败', error)
-        setPlayerState('error')
-        setPlayerError('播放器初始化失败，请检查浏览器兼容性和萤石播放权限。')
-      })
-
-    return () => {
-      cancelled = true
-      try {
-        player?.stop?.()
-        player?.destroy?.()
-      } catch (_) { /* 播放器释放失败不影响后端监控 */ }
-      setPlayerState('idle')
-    }
-  }, [active, config, setPlayerError, setPlayerState])
-
-  return <div ref={hostRef} className="ezviz-player-host"><div id="ezviz-player" /></div>
 }
 
 export default function App() {
@@ -220,9 +164,9 @@ export default function App() {
     return () => ws.close()
   }, [])
 
-  // ── 视频 WebSocket ──
+  // ── 视频 WebSocket (分析画面 — 骨骼叠加) ──
   useEffect(() => {
-    if (videoTab !== 'analysis' && videoTab !== 'audio') return undefined
+    if (videoTab !== 'analysis') return undefined
 
     let stopped = false
     let currentObjectUrl = ''
@@ -238,7 +182,6 @@ export default function App() {
           if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
           currentObjectUrl = url
           if (videoImgRef.current) videoImgRef.current.src = url
-          if (videoAudioRef.current) videoAudioRef.current.src = url
         }
       }
 
@@ -247,6 +190,39 @@ export default function App() {
       }
     }
     connectVideo()
+    return () => {
+      stopped = true
+      videoWsRef.current?.close()
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
+    }
+  }, [videoTab])
+
+  // ── 原始视频 WebSocket (声音监测 — 无骨骼) ──
+  useEffect(() => {
+    if (videoTab !== 'audio') return undefined
+
+    let stopped = false
+    let currentObjectUrl = ''
+    const connectRaw = () => {
+      if (stopped) return
+      const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/video/raw`
+      const ws = new WebSocket(wsUrl)
+      videoWsRef.current = ws
+
+      ws.onmessage = (event) => {
+        if (event.data instanceof Blob) {
+          const url = URL.createObjectURL(event.data)
+          if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
+          currentObjectUrl = url
+          if (videoAudioRef.current) videoAudioRef.current.src = url
+        }
+      }
+
+      ws.onclose = () => {
+        if (!stopped) setTimeout(connectRaw, 3000)
+      }
+    }
+    connectRaw()
     return () => {
       stopped = true
       videoWsRef.current?.close()
@@ -657,6 +633,9 @@ export default function App() {
               devicesLoading={devicesLoading}
               audioSource={audioSource}
               setAudioSource={setAudioSource}
+              playerConfig={playerConfig}
+              setPlayerState={setPlayerState}
+              setPlayerError={setPlayerError}
             />
           )}
         </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import * as echarts from 'echarts'
+import EzvizPlayer from './EzvizPlayer'
 
 const API_BASE = '/api/v1'
 
@@ -7,7 +8,7 @@ export default function AudioMonitor({
   videoRef, pipelineAudio, isRunning, startMonitor, stopMonitor,
   devices, selectedDeviceId, setSelectedDeviceId, selectedDevice,
   sourceMode, source, channelNo, setChannelNo, devicesLoading,
-  audioSource, setAudioSource,
+  audioSource, setAudioSource, playerConfig, setPlayerState, setPlayerError,
 }) {
   const [audioStatus, setAudioStatus] = useState(null)
   const [results, setResults] = useState(null)
@@ -16,8 +17,8 @@ export default function AudioMonitor({
   const [recording, setRecording] = useState(false)
   const [liveAnalyzing, setLiveAnalyzing] = useState(false)
   const [micError, setMicError] = useState('')
-  // 模式: 'idle' | 'browser' | 'video'
   const [monitorMode, setMonitorMode] = useState('idle')
+  const [showEzvizPlayer, setShowEzvizPlayer] = useState(false)
 
   const pipelineChartRef = useRef(null)
   const waveformRef = useRef(null)
@@ -296,16 +297,22 @@ export default function AudioMonitor({
 
   // 活跃结果
   const activeResult = monitorMode === 'video' ? pipelineAudio?.lastResult : results
-  const showVideoPreview = true // 始终显示视频区域
+  const isEzvizVideoMode = monitorMode === 'video' && sourceMode === 'ezviz' && playerConfig && isRunning
 
   return (
     <div className="audio-monitor">
-      {/* ── 视频缩略 ── */}
       {showVideoPreview && (
         <div className="audio-video-preview">
-          <img ref={videoRef} alt="监控画面" className="audio-video-thumb" />
+          {isEzvizVideoMode ? (
+            <EzvizPlayer active={true} config={playerConfig} audio={true} setPlayerState={setPlayerState} setPlayerError={setPlayerError} />
+          ) : (
+            <img ref={videoRef} alt="监控画面" className="audio-video-thumb" />
+          )}
           {monitorMode === 'video' && isRunning && (
-            <span className="audio-video-label">音频来源: {pipelineAudio?.source || '视频源'}</span>
+            <span className="audio-video-label">
+              音频来源: {pipelineAudio?.source || '视频源'}
+              {isEzvizVideoMode && ' (含声音)'}
+            </span>
           )}
           {monitorMode !== 'video' && !isRunning && (
             <div className="audio-video-placeholder">

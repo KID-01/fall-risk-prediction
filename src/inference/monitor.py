@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 from src.alerts.engine import AlertEngine, AlertEvent, RiskLevel
 from src.api.database import Database
-from src.api.websocket import video_manager
+from src.api.websocket import raw_video_manager, video_manager
 from src.data.audio_capture import AudioCapture
 from src.data.frame_filter import FrameFilter
 from src.data.human_detector import HumanDetector
@@ -180,6 +180,7 @@ class FallRiskMonitor:
         person_id = self.person_id
         device_id = self.device_id
         _last_broadcast = 0.0
+        _last_raw_broadcast = 0.0
 
         try:
             baseline = self.baseline_manager.load_baseline(person_id)
@@ -217,6 +218,13 @@ class FallRiskMonitor:
                             )
                             jpeg = encode_jpeg(overlay)
                             video_manager.broadcast_frame(jpeg)
+                        except Exception:
+                            pass
+                    if raw_video_manager.has_clients and now - _last_raw_broadcast >= 0.1:
+                        _last_raw_broadcast = now
+                        try:
+                            raw_jpeg = encode_jpeg(video_frame.frame)
+                            raw_video_manager.broadcast_frame(raw_jpeg)
                         except Exception:
                             pass
 
