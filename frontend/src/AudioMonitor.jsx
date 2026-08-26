@@ -301,26 +301,24 @@ export default function AudioMonitor({
 
   return (
     <div className="audio-monitor">
-      {showVideoPreview && (
-        <div className="audio-video-preview">
-          {isEzvizVideoMode ? (
-            <EzvizPlayer active={true} config={playerConfig} audio={true} setPlayerState={setPlayerState} setPlayerError={setPlayerError} />
-          ) : (
-            <img ref={videoRef} alt="监控画面" className="audio-video-thumb" />
-          )}
-          {monitorMode === 'video' && isRunning && (
-            <span className="audio-video-label">
-              音频来源: {pipelineAudio?.source || '视频源'}
-              {isEzvizVideoMode && ' (含声音)'}
-            </span>
-          )}
-          {monitorMode !== 'video' && !isRunning && (
-            <div className="audio-video-placeholder">
-              <span>选择「视频源收音」后显示实时画面</span>
-            </div>
-          )}
-        </div>
-      )}
+      <div className="audio-video-preview">
+        {isEzvizVideoMode ? (
+          <EzvizPlayer active={true} config={playerConfig} audio={true} setPlayerState={setPlayerState} setPlayerError={setPlayerError} />
+        ) : (
+          <img ref={videoRef} alt="监控画面" className="audio-video-thumb" />
+        )}
+        {monitorMode === 'video' && isRunning && (
+          <span className="audio-video-label">
+            音频来源: {pipelineAudio?.source || '视频源'}
+            {isEzvizVideoMode && ' (含声音)'}
+          </span>
+        )}
+        {monitorMode !== 'video' && !isRunning && (
+          <div className="audio-video-placeholder">
+            <span>选择「视频源收音」后显示实时画面</span>
+          </div>
+        )}
+      </div>
 
       {/* ── 视频源设备选择 (仅在视频模式且未运行时显示) ── */}
       {monitorMode === 'video' && !isRunning && (
