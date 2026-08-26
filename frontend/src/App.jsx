@@ -117,6 +117,7 @@ export default function App() {
   const wsRef = useRef(null)
   const videoWsRef = useRef(null)
   const videoImgRef = useRef(null)
+  const videoAudioRef = useRef(null)
   const gaugeRef = useRef(null)
   const trendRef = useRef(null)
 
@@ -221,7 +222,7 @@ export default function App() {
 
   // ── 视频 WebSocket ──
   useEffect(() => {
-    if (videoTab !== 'analysis') return undefined
+    if (videoTab !== 'analysis' && videoTab !== 'audio') return undefined
 
     let stopped = false
     let currentObjectUrl = ''
@@ -232,11 +233,12 @@ export default function App() {
       videoWsRef.current = ws
 
       ws.onmessage = (event) => {
-        if (videoImgRef.current && event.data instanceof Blob) {
+        if (event.data instanceof Blob) {
           const url = URL.createObjectURL(event.data)
           if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl)
           currentObjectUrl = url
-          videoImgRef.current.src = url
+          if (videoImgRef.current) videoImgRef.current.src = url
+          if (videoAudioRef.current) videoAudioRef.current.src = url
         }
       }
 
@@ -567,10 +569,8 @@ export default function App() {
               disabled={status.is_running}
               aria-label="音频源"
             >
-              <option value="auto">音频: 自动(跟随视频源)</option>
-              <option value="camera">音频: 监控收音</option>
-              <option value="mic">音频: 麦克风</option>
-              <option value="off">音频: 关闭</option>
+              <option value="auto">跟随视频源(推荐)</option>
+              <option value="off">关闭音频</option>
             </select>
           </div>
         </div>
@@ -634,6 +634,7 @@ export default function App() {
             </>
           ) : (
             <AudioMonitor
+              videoRef={videoAudioRef}
               pipelineAudio={{
                 enabled: status.audio_enabled,
                 source: status.audio_source,

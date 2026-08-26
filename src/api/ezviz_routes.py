@@ -153,24 +153,7 @@ async def start_monitor(
 
     if body.audio_source == "off":
         audio_source = "off"
-    elif body.audio_source == "mic":
-        audio_source = "mic"
-    elif body.audio_source == "camera":
-        # 监控收音: 显式获取 RTSP 音频流, 失败报错
-        try:
-            rtsp_url = await asyncio.wait_for(
-                client.get_rtsp_url(serial, body.channel_no), timeout=5.0
-            )
-            if rtsp_url and rtsp_url.lower().startswith("rtsp://"):
-                audio_source = rtsp_url
-            else:
-                raise HTTPException(status_code=502, detail="未获取到 RTSP 音频流地址")
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail="获取监控音频流失败") from exc
     elif body.audio_source in ("auto", ""):
-        # 自动模式: 优先尝试 RTSP (有独立音频流), 失败直接关音频, 不阻塞启动
         audio_source = "off"
         try:
             rtsp_url = await asyncio.wait_for(

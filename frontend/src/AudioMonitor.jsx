@@ -3,7 +3,7 @@ import * as echarts from 'echarts'
 
 const API_BASE = '/api/v1'
 
-export default function AudioMonitor({ pipelineAudio }) {
+export default function AudioMonitor({ videoRef, pipelineAudio }) {
   const [status, setStatus] = useState(null)
   const [results, setResults] = useState(null)
   const [error, setError] = useState('')
@@ -315,6 +315,14 @@ export default function AudioMonitor({ pipelineAudio }) {
 
   return (
     <div className="audio-monitor">
+      {/* ── 视频缩略 ── */}
+      {pipelineAudio?.enabled && (
+        <div className="audio-video-preview">
+          <img ref={videoRef} alt="监控画面" className="audio-video-thumb" />
+          <span className="audio-video-label">音频来源: {pipelineAudio.source || '未知'}</span>
+        </div>
+      )}
+
       {/* ── 状态栏 ── */}
       <div className="audio-toolbar">
         <div className="audio-status">

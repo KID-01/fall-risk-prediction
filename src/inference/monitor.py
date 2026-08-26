@@ -121,19 +121,12 @@ class FallRiskMonitor:
         cfg_audio_source = self.config.get("audio", {}).get("source", "off")
         effective_audio_source = audio_source if audio_source is not None else cfg_audio_source
 
-        if effective_audio_source == "auto":
+        if effective_audio_source not in ("off", ""):
             src_lower = source.lower()
             if src_lower.startswith(("rtsp://", "rtmp://")):
                 effective_audio_source = source
             else:
                 effective_audio_source = "off"
-        elif effective_audio_source == "camera":
-            src_lower = source.lower()
-            if src_lower.startswith(("rtsp://", "rtmp://")):
-                effective_audio_source = source
-            else:
-                log.error("监控收音模式要求视频源为 RTSP/RTMP 地址")
-                return False
 
         audio_enabled = audio_cfg_enabled and effective_audio_source not in ("off", "")
 
@@ -266,6 +259,17 @@ class FallRiskMonitor:
                             self.status.last_alert = audio_alert
                             if audio_alert.level != RiskLevel.LOW:
                                 self.status.current_risk_level = audio_alert.level
+                                try:
+                                    db = Database()
+                                    db.insert_alert_event(
+                                        alert_level=audio_alert.level.value,
+                                        message=audio_alert.message,
+                                        risk_score=0,
+                                        person_id=person_id,
+                                        device_id=device_id,
+                                    )
+                                except Exception as e:
+                                    log.error(f"音频告警持久化失败: {e}")
 
                         if baseline.is_ready:
                             deviation = self.deviation_detector.check(feature, baseline)

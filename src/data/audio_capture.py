@@ -188,6 +188,7 @@ class AudioCapture:
 
         self._start_time = time.time()
         self._total_read_sec = 0.0
+        self._base_timestamp = time.time()
 
         try:
             while not self.stop_event.is_set():
@@ -390,7 +391,7 @@ class AudioCapture:
         if wave.ndim == 2:
             wave = wave.mean(axis=1)
 
-        timestamp = self._total_read_sec
+        timestamp = self._base_timestamp + self._total_read_sec
         self._total_read_sec += accumulated_samples / self.sample_rate
         duration = accumulated_samples / self.sample_rate
 
@@ -430,7 +431,7 @@ class AudioCapture:
         # s16le -> float32 mono
         wave = np.frombuffer(accumulated, dtype=np.int16).astype(np.float32) / 32768.0
 
-        timestamp = self._total_read_sec
+        timestamp = self._base_timestamp + self._total_read_sec
         self._total_read_sec += len(wave) / self.sample_rate
         duration = len(wave) / self.sample_rate
 
@@ -462,7 +463,7 @@ class AudioCapture:
         # 归一化: float32 mono + 目标采样率
         wave = _to_float32_mono(data, src_sr, self.sample_rate)
 
-        timestamp = self._total_read_sec
+        timestamp = self._base_timestamp + self._total_read_sec
         self._total_read_sec += len(wave) / self.sample_rate
         duration = len(wave) / self.sample_rate
 

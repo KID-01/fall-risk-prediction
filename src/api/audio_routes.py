@@ -68,8 +68,10 @@ async def analyze_audio(file: UploadFile, timestamp: float = 0.0) -> dict[str, A
 
     Args:
         file: multipart 音频文件 (.wav/.flac/.ogg)
-        timestamp: 音频起始时间戳(秒), 透传给事件用于与视频时间轴对齐
+        timestamp: 音频起始时间戳(秒), 默认为当前时间
     """
+    import time as _time
+    effective_ts = timestamp if timestamp > 0 else _time.time()
     analyzer = get_analyzer()
     if not analyzer.enabled:
         raise HTTPException(status_code=503, detail="音频分析未启用 (audio.enabled=false)")
@@ -100,7 +102,7 @@ async def analyze_audio(file: UploadFile, timestamp: float = 0.0) -> dict[str, A
     # 推理在独立线程执行, 避免 CPU 密集计算阻塞事件循环
     try:
         result = await asyncio.to_thread(
-            analyzer.analyze_waveform, waveform, int(sample_rate), timestamp
+            analyzer.analyze_waveform, waveform, int(sample_rate), effective_ts
         )
     except Exception as exc:
         log.warning(f"音频分析失败: {exc}")
