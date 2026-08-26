@@ -153,7 +153,7 @@ async def start_monitor(
 
     if body.audio_source == "off":
         audio_source = "off"
-    elif body.audio_source in ("auto", ""):
+    elif body.audio_source in ("auto", "", "video_source"):
         audio_source = "off"
         try:
             rtsp_url = await asyncio.wait_for(

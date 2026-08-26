@@ -122,8 +122,9 @@ class FallRiskMonitor:
         effective_audio_source = audio_source if audio_source is not None else cfg_audio_source
 
         if effective_audio_source not in ("off", ""):
-            src_lower = source.lower()
-            if src_lower.startswith(("rtsp://", "rtmp://")):
+            if effective_audio_source.lower().startswith(("rtsp://", "rtmp://")):
+                pass  # 已经是有效 URL，保持不变
+            elif source.lower().startswith(("rtsp://", "rtmp://")):
                 effective_audio_source = source
             else:
                 effective_audio_source = "off"
