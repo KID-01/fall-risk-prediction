@@ -305,6 +305,7 @@ class FallRiskMonitor:
 
         try:
             baseline = self.baseline_manager.load_baseline(person_id)
+            _chunks_since_reload = 0
 
             with self.audio_capture:
                 for chunk in self.audio_capture.chunks():
@@ -317,8 +318,18 @@ class FallRiskMonitor:
                         )
                         self.status.last_audio_result = result
                         self.status.audio_chunks_processed += 1
+                        _chunks_since_reload += 1
+
+                        if _chunks_since_reload >= 6:
+                            baseline = self.baseline_manager.load_baseline(person_id)
+                            _chunks_since_reload = 0
 
                         if result.events:
+                            with self.status._audio_lock:
+                                self.status._pending_audio_events.extend(result.events)
+                                if len(self.status._pending_audio_events) > 100:
+                                    self.status._pending_audio_events = self.status._pending_audio_events[-100:]
+
                             if not baseline or not baseline.is_ready:
                                 audio_alert = self.alert_engine.evaluate_audio_only(
                                     result.events, chunk.timestamp,
