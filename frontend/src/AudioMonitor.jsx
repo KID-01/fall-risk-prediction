@@ -5,7 +5,7 @@ import EzvizPlayer from './EzvizPlayer'
 const API_BASE = '/api/v1'
 
 export default function AudioMonitor({
-  videoRef, pipelineAudio, isRunning, startMonitor, stopMonitor,
+  videoRef, pipelineAudio, isRunning, startMonitor, stopMonitor, startAudio, stopAudio,
   devices, selectedDeviceId, setSelectedDeviceId, selectedDevice,
   sourceMode, source, channelNo, setChannelNo, devicesLoading,
   audioSource, setAudioSource, playerConfig, setPlayerState, setPlayerError,
@@ -19,6 +19,7 @@ export default function AudioMonitor({
   const [micError, setMicError] = useState('')
   const [monitorMode, setMonitorMode] = useState('idle')
   const [showEzvizPlayer, setShowEzvizPlayer] = useState(false)
+  const [audioActionPending, setAudioActionPending] = useState(false)
 
   const pipelineChartRef = useRef(null)
   const waveformRef = useRef(null)
@@ -44,6 +45,8 @@ export default function AudioMonitor({
       ? 'recording'
       : error || micError
         ? 'error'
+        : pipelineAudio?.status === 'UNAVAILABLE'
+          ? 'unavailable'
         : monitorMode === 'video' && isRunning
           ? 'ready'
           : audioStatus?.model_loaded
@@ -197,7 +200,9 @@ export default function AudioMonitor({
       const blob = encodeWav(new Float32Array(chunk), sampleRate)
       const formData = new FormData()
       formData.append('file', blob, `live_${Date.now()}.wav`)
-      const res = await fetch(`${API_BASE}/audio/analyze?timestamp=${timestamp}`, { method: 'POST', body: formData })
+      // 浏览器录音的 elapsed 是相对时间；服务端历史查询使用 Unix 时间。
+      const chunkStart = Date.now() / 1000 - chunk.length / sampleRate
+      const res = await fetch(`${API_BASE}/audio/analyze?timestamp=${chunkStart}`, { method: 'POST', body: formData })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.detail || `HTTP ${res.status}`)
@@ -274,16 +279,24 @@ export default function AudioMonitor({
   }
 
   // ── 切换视频源收音 ──
-  const toggleVideoMode = () => {
+  const toggleVideoMode = async () => {
+    if (audioActionPending) return
     if (monitorMode === 'video') {
-      setMonitorMode('idle')
-      // 不停后端监控，只停止音频
+      setAudioActionPending(true)
+      const stopped = await stopAudio()
+      setAudioActionPending(false)
+      if (stopped) setMonitorMode('idle')
     } else {
       if (!isRunning) {
         // 启动后端监控 (带音频) — 直接传值避免 React state 批量更新延迟
         startMonitor({ stayOnTab: true, audioSource: 'video_source' })
+        setMonitorMode('video')
+        return
       }
-      setMonitorMode('video')
+      setAudioActionPending(true)
+      const started = await startAudio('video_source')
+      setAudioActionPending(false)
+      if (started) setMonitorMode('video')
     }
   }
 
@@ -361,13 +374,14 @@ export default function AudioMonitor({
           <span>{{
             idle: '未连接',
             ready: '就绪',
+            unavailable: '不可用',
             recording: '录音中...',
             analyzing: '分析中...',
             error: '错误',
           }[statusState]}</span>
           {audioStatus && (
             <span className="audio-status-detail">
-              {audioStatus.model_type} | {audioStatus.sample_rate}Hz | 模型{audioStatus.model_loaded ? '已加载' : '加载中'}
+              {audioStatus.model_type} | {audioStatus.sample_rate}Hz | 模型{audioStatus.model_loaded ? '已加载' : audioStatus.model_status === 'UNAVAILABLE' ? '资源缺失' : '待首次分析'}
             </span>
           )}
           {monitorMode === 'video' && isRunning && (
@@ -388,7 +402,7 @@ export default function AudioMonitor({
           <button
             className="btn btn-secondary"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading || recording || monitorMode === 'video'}
+            disabled={uploading || recording || monitorMode === 'video' || audioActionPending}
           >
             {uploading ? '分析中...' : '上传音频文件'}
           </button>
@@ -397,16 +411,16 @@ export default function AudioMonitor({
           <button
             className={`btn ${monitorMode === 'browser' ? 'btn-danger' : 'btn-primary'}`}
             onClick={toggleBrowserMode}
-            disabled={uploading || monitorMode === 'video'}
+            disabled={uploading || monitorMode === 'video' || audioActionPending}
           >
             {monitorMode === 'browser' ? '■ 停止' : '🎤 浏览器收音'}
           </button>
           <button
             className={`btn ${monitorMode === 'video' ? 'btn-danger' : 'btn-primary'}`}
             onClick={toggleVideoMode}
-            disabled={uploading || recording}
+            disabled={uploading || recording || audioActionPending}
           >
-            {monitorMode === 'video' ? '■ 停止' : '📹 视频源收音'}
+            {audioActionPending ? '处理中...' : monitorMode === 'video' ? '停止音频' : '视频源收音'}
           </button>
         </div>
       </div>

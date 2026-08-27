@@ -407,6 +407,39 @@ export default function App() {
       setControlError('无法连接后端服务，请确认 FastAPI 已启动')
     }
   }
+  const startAudio = async (audioSource = 'video_source') => {
+    try {
+      const response = await fetch(`${API_BASE}/stream/audio/start`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audio_source: audioSource }),
+      })
+      if (!response.ok) {
+        setControlError(await readError(response))
+        return false
+      }
+      setControlError('')
+      fetchStatus()
+      return true
+    } catch (_) {
+      setControlError('无法连接后端服务，请确认 FastAPI 已启动')
+      return false
+    }
+  }
+  const stopAudio = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/stream/audio/stop`, { method: 'POST' })
+      if (!response.ok) {
+        setControlError(await readError(response))
+        return false
+      }
+      setControlError('')
+      fetchStatus()
+      return true
+    } catch (_) {
+      setControlError('无法连接后端服务，请确认 FastAPI 已启动')
+      return false
+    }
+  }
   const refreshPlayer = async () => {
     if (!selectedDeviceId) return
     setPlayerState('loading')
@@ -614,6 +647,7 @@ export default function App() {
               videoRef={videoAudioRef}
               pipelineAudio={{
                 enabled: status.audio_enabled,
+                status: status.audio_status,
                 source: status.audio_source,
                 chunksProcessed: status.audio_chunks_processed,
                 error: status.audio_error,
@@ -623,6 +657,8 @@ export default function App() {
               isRunning={status.is_running}
               startMonitor={startMonitor}
               stopMonitor={stopMonitor}
+              startAudio={startAudio}
+              stopAudio={stopAudio}
               devices={devices}
               selectedDeviceId={selectedDeviceId}
               setSelectedDeviceId={setSelectedDeviceId}
