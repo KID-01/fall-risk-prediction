@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -87,13 +88,15 @@ class TestAudioCaptureFileBackend:
         chunk_seconds = 1
         cap = AudioCapture(source=str(path), sample_rate=32000, chunk_seconds=chunk_seconds)
         cap.open()
-
+        before = time.time()
         chunks = list(cap.chunks())
         assert len(chunks) == int(total_dur / chunk_seconds)  # 5 chunks
 
         for i, chunk in enumerate(chunks):
             assert chunk.duration_sec == pytest.approx(chunk_seconds, abs=0.1)
-            assert chunk.timestamp == pytest.approx(i * chunk_seconds, abs=0.1)
+            assert chunk.timestamp >= before
+            if i:
+                assert chunk.timestamp - chunks[i - 1].timestamp == pytest.approx(chunk_seconds, abs=0.1)
             assert chunk.sample_rate == 32000
             assert chunk.waveform.dtype == np.float32
             assert chunk.waveform.ndim == 1  # 单声道
@@ -155,8 +158,9 @@ class TestAudioCaptureFileBackend:
 # ============================================================
 class TestAudioCaptureRTSPBackend:
     @patch("src.data.audio_capture.subprocess.Popen")
+    @patch("src.data.audio_capture.os.path.isfile", return_value=True)
     @patch("src.data.audio_capture.which", return_value="/fake/ffmpeg")
-    def test_rtsp_yields_chunks(self, mock_which, mock_popen, tmp_path):
+    def test_rtsp_yields_chunks(self, mock_which, mock_isfile, mock_popen, tmp_path):
         """RTSP 流模拟: ffmpeg 输出 s16le PCM -> 正确解码为 float32"""
         target_sr = 32000
         chunk_seconds = 1
@@ -380,8 +384,9 @@ class TestAudioChunkFloat32MonoContract:
             assert chunk.timestamp >= 0
 
     @patch("src.data.audio_capture.subprocess.Popen")
+    @patch("src.data.audio_capture.os.path.isfile", return_value=True)
     @patch("src.data.audio_capture.which", return_value="/fake/ffmpeg")
-    def test_chunk_contract_rtsp(self, mock_which, mock_popen, tmp_path):
+    def test_chunk_contract_rtsp(self, mock_which, mock_isfile, mock_popen, tmp_path):
         target_sr = 32000
         chunk_seconds = 1
 

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import io
+import time
 
 import numpy as np
 import pytest
@@ -105,6 +106,9 @@ class TestAudioStatus:
             "impact_threshold": 0.30,
             "checkpoint_exists": True,
             "model_loaded": False,
+            "labels_exist": False,
+            "resources_ready": False,
+            "model_status": "UNAVAILABLE",
         }
 
     def test_status_model_loaded_after_injection(self, monkeypatch, tmp_path):
@@ -158,7 +162,7 @@ class TestAudioAnalyzeHappyPath:
         assert event["label"] == "Thump, thud"
         assert event["class_index"] == 460
         assert event["score"] == pytest.approx(0.9)
-        assert event["timestamp"] == 0.0
+        assert event["timestamp"] >= time.time() - 5
         assert payload["top_labels"][0] == ["Thump, thud", pytest.approx(0.9)]
 
     def test_timestamp_propagation(self, monkeypatch):

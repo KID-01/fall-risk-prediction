@@ -256,3 +256,14 @@ class TestEdgeCases:
         events = [_make_impact_event(-0.1)]
         result = engine.evaluate(dev, 1000.0, has_activity=True, audio_events=events)
         assert result.level == RiskLevel.LOW
+
+    def test_same_audio_category_is_cooled_down(self):
+        """同类音频告警在冷却期内不重复升级，原始事件仍由监控层保存。"""
+        engine = AlertEngine(config=_make_cfg())
+        dev = _make_fake_deviation(DeviationLevel.NONE)
+        first = engine.evaluate(dev, 1000.0, audio_events=[_make_impact_event(0.9)])
+        second = engine.evaluate(dev, 1010.0, audio_events=[_make_impact_event(0.95)])
+        third = engine.evaluate(dev, 1040.0, audio_events=[_make_impact_event(0.95)])
+        assert first.level == RiskLevel.CRITICAL
+        assert second.level == RiskLevel.LOW
+        assert third.level == RiskLevel.CRITICAL

@@ -241,6 +241,8 @@ class TestAudioAnalyzerMapping:
         """_ensure_model 临时替换 torch.load 后必须恢复原样"""
         checkpoint = tmp_path / "dummy.pth"
         checkpoint.write_bytes(b"dummy checkpoint content")
+        labels = tmp_path / "class_labels_indices.csv"
+        labels.write_text("index,mid,display_name\n0,/m/test,Test\n", encoding="utf-8")
         received = {}
 
         class FakeAudioTagging:
@@ -250,6 +252,7 @@ class TestAudioAnalyzerMapping:
         original_load = torch.load
         with patch("src.inference.audio_analyzer._import_audiotagging", return_value=FakeAudioTagging):
             analyzer = AudioAnalyzer(config=_make_cfg(checkpoint_path=str(checkpoint)))
+            analyzer._labels_path = labels
             analyzer._ensure_model()
         assert torch.load is original_load
         assert received["checkpoint_path"] == str(checkpoint)
@@ -261,7 +264,7 @@ class TestAudioAnalyzerMapping:
         analyzer._model.scores[0, 200] = 0.9
         result = analyzer.analyze_waveform(np.zeros(32000, dtype=np.float32), 32000)
         assert result.events == []
-        assert any(label == "200" for label, _ in result.top_labels)
+        assert any(label == "类别200" for label, _ in result.top_labels)
 
 
 # ============================================================

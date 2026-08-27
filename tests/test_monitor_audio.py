@@ -43,6 +43,19 @@ class TestMonitorStatusAudioFields:
         assert s.audio_chunks_processed == 3
 
 
+class TestAudioSourceResolution:
+    def test_mic_is_preserved_for_local_video(self):
+        assert FallRiskMonitor._resolve_audio_source("0", "mic") == "mic"
+
+    def test_video_source_requires_network_stream(self):
+        import pytest
+        with pytest.raises(ValueError):
+            FallRiskMonitor._resolve_audio_source("demo.mp4", "video_source")
+
+    def test_auto_falls_back_to_off_for_local_video(self):
+        assert FallRiskMonitor._resolve_audio_source("demo.mp4", "auto") == "off"
+
+
 # ── start/stop 音频线程 ──
 
 
@@ -61,6 +74,9 @@ class TestMonitorStartStopAudio:
         m.config.pose_estimation = {"backend": "mediapipe"}
         m.status = MonitorStatus()
         m._stop_flag = threading.Event()
+        m._audio_stop_flag = threading.Event()
+        m.person_id = "default"
+        m.device_id = "default"
         m._keypoint_buffer = []
         m._buffer_window = 30
         m._thread = None
@@ -73,6 +89,7 @@ class TestMonitorStartStopAudio:
         m.frame_filter = MagicMock()
         m.feature_calculator = MagicMock()
         m.baseline_manager = MagicMock()
+        m.baseline_manager.load_baseline.return_value = MagicMock(is_ready=True)
         m.deviation_detector = MagicMock()
         m.alert_engine = MagicMock()
         return m
@@ -114,7 +131,7 @@ class TestMonitorStartStopAudio:
         mock_capture = MagicMock()
         m.audio_capture = mock_capture
         m.stop()
-        mock_audio_thread.join.assert_called_once_with(timeout=5)
+        mock_audio_thread.join.assert_called_once_with(timeout=3)
         assert m._audio_thread is None
         mock_capture.close.assert_called_once()
         assert m.audio_capture is None
@@ -129,6 +146,13 @@ class TestRunAudio:
     def test_processes_chunks_and_stores_events(self):
         m = object.__new__(FallRiskMonitor)
         m._stop_flag = threading.Event()
+        m._audio_stop_flag = threading.Event()
+        m.person_id = "default"
+        m.device_id = "default"
+        m.config = MagicMock()
+        m.config.audio.get.side_effect = lambda key, default=None: default
+        m.baseline_manager = MagicMock()
+        m.baseline_manager.load_baseline.return_value = MagicMock(is_ready=True)
         m.audio_analyzer = MagicMock()
         m.status = MonitorStatus()
 
@@ -159,6 +183,13 @@ class TestRunAudio:
     def test_analyzer_exception_stored(self):
         m = object.__new__(FallRiskMonitor)
         m._stop_flag = threading.Event()
+        m._audio_stop_flag = threading.Event()
+        m.person_id = "default"
+        m.device_id = "default"
+        m.config = MagicMock()
+        m.config.audio.get.side_effect = lambda key, default=None: default
+        m.baseline_manager = MagicMock()
+        m.baseline_manager.load_baseline.return_value = MagicMock(is_ready=True)
         m.status = MonitorStatus()
 
         mock_chunk = MagicMock()
@@ -183,11 +214,17 @@ class TestRunAudio:
     def test_stop_flag_breaks_loop(self):
         m = object.__new__(FallRiskMonitor)
         m.status = MonitorStatus()
+        m._audio_stop_flag = threading.Event()
+        m.person_id = "default"
+        m.device_id = "default"
+        m.config = MagicMock()
+        m.config.audio.get.side_effect = lambda key, default=None: default
         m.audio_analyzer = MagicMock()
 
         stop = threading.Event()
         stop.set()
         m._stop_flag = stop
+        m._audio_stop_flag.set()
 
         call_count = 0
 
@@ -263,6 +300,7 @@ class TestGetStatusAudio:
         m = object.__new__(FallRiskMonitor)
         m.status = MonitorStatus(
             audio_enabled=True,
+            audio_status="RUNNING",
             audio_source="mic",
             audio_chunks_processed=5,
             audio_error="some error",
@@ -289,6 +327,7 @@ class TestGetStatusAudio:
 
         d = m.get_status()
         assert d["audio_enabled"] is True
+        assert d["audio_status"] == "RUNNING"
         assert d["audio_source"] == "mic"
         assert d["audio_chunks_processed"] == 5
         assert d["audio_error"] == "some error"
