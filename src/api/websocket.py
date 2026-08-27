@@ -92,6 +92,7 @@ class VideoConnectionManager:
 # 全局连接管理器单例
 manager = ConnectionManager()
 video_manager = VideoConnectionManager()
+raw_video_manager = VideoConnectionManager()
 
 
 async def websocket_endpoint(websocket: WebSocket):
@@ -111,11 +112,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 async def video_websocket_endpoint(websocket: WebSocket):
-    """WebSocket 端点 — 视频帧推送"""
+    """WebSocket 端点 — 视频帧推送 (骨骼叠加)"""
     await video_manager.connect(websocket)
     try:
         while True:
-            # 保持连接，接收心跳
             data = await websocket.receive_text()
             msg = json.loads(data) if data else {}
             if msg.get("type") == "ping":
@@ -125,3 +125,19 @@ async def video_websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         log.error(f"视频WebSocket异常: {e}")
         video_manager.disconnect(websocket)
+
+
+async def raw_video_websocket_endpoint(websocket: WebSocket):
+    """WebSocket 端点 — 原始视频帧推送 (无骨骼叠加)"""
+    await raw_video_manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            msg = json.loads(data) if data else {}
+            if msg.get("type") == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+    except WebSocketDisconnect:
+        raw_video_manager.disconnect(websocket)
+    except Exception as e:
+        log.error(f"原始视频WebSocket异常: {e}")
+        raw_video_manager.disconnect(websocket)

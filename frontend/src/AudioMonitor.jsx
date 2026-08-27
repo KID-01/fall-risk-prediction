@@ -1,16 +1,24 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import * as echarts from 'echarts'
+import EzvizPlayer from './EzvizPlayer'
 
 const API_BASE = '/api/v1'
 
-export default function AudioMonitor({ pipelineAudio }) {
-  const [status, setStatus] = useState(null)
+export default function AudioMonitor({
+  videoRef, pipelineAudio, isRunning, startMonitor, stopMonitor,
+  devices, selectedDeviceId, setSelectedDeviceId, selectedDevice,
+  sourceMode, source, channelNo, setChannelNo, devicesLoading,
+  audioSource, setAudioSource, playerConfig, setPlayerState, setPlayerError,
+}) {
+  const [audioStatus, setAudioStatus] = useState(null)
   const [results, setResults] = useState(null)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [recording, setRecording] = useState(false)
   const [liveAnalyzing, setLiveAnalyzing] = useState(false)
   const [micError, setMicError] = useState('')
+  const [monitorMode, setMonitorMode] = useState('idle')
+  const [showEzvizPlayer, setShowEzvizPlayer] = useState(false)
 
   const pipelineChartRef = useRef(null)
   const waveformRef = useRef(null)
@@ -22,16 +30,25 @@ export default function AudioMonitor({ pipelineAudio }) {
   const lastFlushRef = useRef(0)
   const fileInputRef = useRef(null)
 
+  // 视频模式自动跟随管线状态
+  useEffect(() => {
+    if (monitorMode === 'video' && !isRunning) {
+      setMonitorMode('idle')
+    }
+  }, [monitorMode, isRunning])
+
   // 状态点: idle | ready | recording | analyzing | error
   const statusState = uploading || liveAnalyzing
     ? 'analyzing'
     : recording
       ? 'recording'
-      : error
+      : error || micError
         ? 'error'
-        : status?.enabled
+        : monitorMode === 'video' && isRunning
           ? 'ready'
-          : 'idle'
+          : audioStatus?.model_loaded
+            ? 'ready'
+            : 'idle'
 
   // 获取音频状态
   const fetchStatus = useCallback(async () => {
@@ -39,11 +56,11 @@ export default function AudioMonitor({ pipelineAudio }) {
       const res = await fetch(`${API_BASE}/audio/status`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setStatus(data)
+      setAudioStatus(data)
       setError('')
     } catch (e) {
       setError(`状态获取失败: ${e.message}`)
-      setStatus(null)
+      setAudioStatus(null)
     }
   }, [])
 
@@ -72,35 +89,25 @@ export default function AudioMonitor({ pipelineAudio }) {
       },
       grid: { left: 10, right: 40, top: 10, bottom: 10, containLabel: true },
       xAxis: {
-        type: 'value',
-        min: 0,
-        max: 1,
+        type: 'value', min: 0, max: 1,
         splitLine: { lineStyle: { color: isDark ? '#334155' : '#f1f5f9' } },
         axisLabel: { fontSize: 11, color: mutedColor },
       },
       yAxis: {
-        type: 'category',
-        data: [...labels].reverse(),
+        type: 'category', data: [...labels].reverse(),
         axisLabel: { fontSize: 11, color: textColor },
-        axisTick: { show: false },
-        axisLine: { show: false },
+        axisTick: { show: false }, axisLine: { show: false },
       },
       series: [{
-        type: 'bar',
-        data: [...scores].reverse(),
-        barWidth: 14,
+        type: 'bar', data: [...scores].reverse(), barWidth: 14,
         itemStyle: {
           borderRadius: [0, 4, 4, 0],
           color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#6366f1' },
-            { offset: 1, color: '#818cf8' },
+            { offset: 0, color: '#6366f1' }, { offset: 1, color: '#818cf8' },
           ]),
         },
         label: {
-          show: true,
-          position: 'right',
-          fontSize: 11,
-          color: textColor,
+          show: true, position: 'right', fontSize: 11, color: textColor,
           formatter: (p) => p.value.toFixed(2),
         },
       }],
@@ -118,49 +125,30 @@ export default function AudioMonitor({ pipelineAudio }) {
         mediaStreamRef.current.getTracks().forEach(t => t.stop())
         mediaStreamRef.current = null
       }
-      if (workletRef.current) {
-        workletRef.current.disconnect()
-        workletRef.current = null
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close()
-        audioContextRef.current = null
-      }
+      if (workletRef.current) { workletRef.current.disconnect(); workletRef.current = null }
+      if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null }
     }
   }, [])
 
-  // 文件上传分析
+  // ── 文件上传 ──
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    setUploading(true)
-    setError('')
-
+    setUploading(true); setError('')
     const formData = new FormData()
     formData.append('file', file)
-
     try {
-      const res = await fetch(`${API_BASE}/audio/analyze`, {
-        method: 'POST',
-        body: formData,
-      })
-
+      const res = await fetch(`${API_BASE}/audio/analyze`, { method: 'POST', body: formData })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.detail || `HTTP ${res.status}`)
       }
-
-      const data = await res.json()
-      setResults(data)
-    } catch (e) {
-      setError(`分析失败: ${e.message}`)
-    } finally {
-      setUploading(false)
-    }
+      setResults(await res.json())
+    } catch (e) { setError(`分析失败: ${e.message}`) }
+    finally { setUploading(false) }
   }
 
-  // 绘制波形
+  // ── 波形绘制 ──
   const drawWaveform = useCallback((float32Array) => {
     const canvas = waveformRef.current
     if (!canvas) return
@@ -168,14 +156,11 @@ export default function AudioMonitor({ pipelineAudio }) {
     const dpr = window.devicePixelRatio || 1
     const width = canvas.clientWidth
     const height = canvas.clientHeight
-    canvas.width = width * dpr
-    canvas.height = height * dpr
+    canvas.width = width * dpr; canvas.height = height * dpr
     ctx.scale(dpr, dpr)
-
     ctx.clearRect(0, 0, width, height)
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--primary') || '#3b82f6'
     ctx.globalAlpha = 0.6
-
     const step = Math.max(1, Math.floor(float32Array.length / width))
     for (let x = 0; x < width; x++) {
       let max = 0
@@ -188,11 +173,10 @@ export default function AudioMonitor({ pipelineAudio }) {
     ctx.globalAlpha = 1
   }, [])
 
-  // 音频工作节点处理
+  // ── 音频数据处理 ──
   const handleAudioData = useCallback((float32Array) => {
     bufferRef.current.push(...float32Array)
     drawWaveform(float32Array)
-
     const now = Date.now()
     const elapsed = (now - recordingStartRef.current) / 1000
     const sr = audioContextRef.current?.sampleRate || 32000
@@ -202,69 +186,46 @@ export default function AudioMonitor({ pipelineAudio }) {
     }
   }, [drawWaveform])
 
-  // 刷新缓冲区并上传
   const flushBuffer = useCallback(async (timestamp) => {
     if (!workletRef.current || !audioContextRef.current) return
-
     const sampleRate = audioContextRef.current.sampleRate
     const chunk = bufferRef.current.splice(0, bufferRef.current.length)
     if (chunk.length < 0.5 * sampleRate) return
-
-    setLiveAnalyzing(true)
-    setError('')
+    setLiveAnalyzing(true); setError('')
     try {
       const { encodeWav } = await import('./audioUtils.js')
       const blob = encodeWav(new Float32Array(chunk), sampleRate)
-
       const formData = new FormData()
       formData.append('file', blob, `live_${Date.now()}.wav`)
-
-      const res = await fetch(`${API_BASE}/audio/analyze?timestamp=${timestamp}`, {
-        method: 'POST',
-        body: formData,
-      })
-
+      const res = await fetch(`${API_BASE}/audio/analyze?timestamp=${timestamp}`, { method: 'POST', body: formData })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.detail || `HTTP ${res.status}`)
       }
-      const data = await res.json()
-      setResults(data)
-    } catch (e) {
-      setError(`实时分析失败: ${e.message}`)
-    } finally {
-      setLiveAnalyzing(false)
-    }
+      setResults(await res.json())
+    } catch (e) { setError(`实时分析失败: ${e.message}`) }
+    finally { setLiveAnalyzing(false) }
   }, [])
 
-  // 开始麦克风录音
-  const startRecording = async () => {
+  // ── 浏览器麦克风录音 ──
+  const startBrowserRecording = async () => {
     setMicError('')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       mediaStreamRef.current = stream
-
       const audioContext = new AudioContext({ sampleRate: 32000 })
       audioContextRef.current = audioContext
 
-      // 创建 AudioWorklet (内联 Blob URL)
       const workletCode = `
         class AudioProcessor extends AudioWorkletProcessor {
-          constructor() {
-            super()
-            this.buffer = new Float32Array(1024)
-            this.offset = 0
-          }
+          constructor() { super(); this.buffer = new Float32Array(1024); this.offset = 0 }
           process(inputs) {
             const input = inputs[0]
             if (input.length > 0) {
               const channel = input[0]
               for (let i = 0; i < channel.length; i++) {
                 this.buffer[this.offset++] = channel[i]
-                if (this.offset >= 1024) {
-                  this.port.postMessage(this.buffer.slice())
-                  this.offset = 0
-                }
+                if (this.offset >= 1024) { this.port.postMessage(this.buffer.slice()); this.offset = 0 }
               }
             }
             return true
@@ -286,36 +247,114 @@ export default function AudioMonitor({ pipelineAudio }) {
 
       recordingStartRef.current = Date.now()
       lastFlushRef.current = 0
-      setRecording(true)
-      setError('')
+      setRecording(true); setError('')
     } catch (e) {
       setMicError(`麦克风启动失败: ${e.message}`)
       setRecording(false)
     }
   }
 
-  // 停止麦克风录音
-  const stopRecording = () => {
-    if (workletRef.current) {
-      workletRef.current.disconnect()
-      workletRef.current = null
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close()
-      audioContextRef.current = null
-    }
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(t => t.stop())
-      mediaStreamRef.current = null
-    }
+  const stopBrowserRecording = () => {
+    if (workletRef.current) { workletRef.current.disconnect(); workletRef.current = null }
+    if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null }
+    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null }
     bufferRef.current = []
-    setRecording(false)
-    setLiveAnalyzing(false)
+    setRecording(false); setLiveAnalyzing(false)
   }
+
+  // ── 切换浏览器收音 ──
+  const toggleBrowserMode = () => {
+    if (monitorMode === 'browser') {
+      stopBrowserRecording()
+      setMonitorMode('idle')
+    } else {
+      setMonitorMode('browser')
+      startBrowserRecording()
+    }
+  }
+
+  // ── 切换视频源收音 ──
+  const toggleVideoMode = () => {
+    if (monitorMode === 'video') {
+      setMonitorMode('idle')
+      // 不停后端监控，只停止音频
+    } else {
+      if (!isRunning) {
+        // 启动后端监控 (带音频) — 直接传值避免 React state 批量更新延迟
+        startMonitor({ stayOnTab: true, audioSource: 'video_source' })
+      }
+      setMonitorMode('video')
+    }
+  }
+
+  // 切换模式时，关闭之前的浏览器录音
+  useEffect(() => {
+    if (monitorMode !== 'browser' && recording) {
+      stopBrowserRecording()
+    }
+  }, [monitorMode])
+
+  // 活跃结果
+  const activeResult = monitorMode === 'video' ? pipelineAudio?.lastResult : results
+  const isEzvizVideoMode = monitorMode === 'video' && sourceMode === 'ezviz' && playerConfig && isRunning
 
   return (
     <div className="audio-monitor">
-      {/* ── 状态栏 ── */}
+      <div className="audio-video-preview">
+        {isEzvizVideoMode ? (
+          <EzvizPlayer active={true} config={playerConfig} audio={true} setPlayerState={setPlayerState} setPlayerError={setPlayerError} />
+        ) : (
+          <img ref={videoRef} alt="监控画面" className="audio-video-thumb" />
+        )}
+        {monitorMode === 'video' && isRunning && (
+          <span className="audio-video-label">
+            音频来源: {pipelineAudio?.source || '视频源'}
+            {isEzvizVideoMode && ' (含声音)'}
+          </span>
+        )}
+        {monitorMode !== 'video' && !isRunning && (
+          <div className="audio-video-placeholder">
+            <span>选择「视频源收音」后显示实时画面</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── 视频源设备选择 (仅在视频模式且未运行时显示) ── */}
+      {monitorMode === 'video' && !isRunning && (
+        <div className="audio-device-select">
+          {sourceMode === 'ezviz' ? (
+            <div className="audio-device-row">
+              <select
+                className="select"
+                value={selectedDeviceId}
+                onChange={e => setSelectedDeviceId(e.target.value)}
+              >
+                <option value="">{devicesLoading ? '加载中...' : '请选择设备'}</option>
+                {devices.map(d => (
+                  <option key={d.device_id} value={d.device_id}>
+                    {d.name}（{d.display_serial}，{d.online ? '在线' : '离线'}）
+                  </option>
+                ))}
+              </select>
+              {selectedDevice && (
+                <select
+                  className="select audio-channel-select"
+                  value={channelNo}
+                  onChange={e => setChannelNo(Number(e.target.value))}
+                >
+                  {(selectedDevice?.channels || []).map(ch => <option key={ch} value={ch}>通道 {ch}</option>)}
+                </select>
+              )}
+            </div>
+          ) : (
+            <div className="audio-device-row">
+              <span className="audio-source-url">{source || '未设置视频源'}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 状态栏 + 操作按钮 ── */}
       <div className="audio-toolbar">
         <div className="audio-status">
           <span className={`audio-status-dot ${statusState}`} data-state={statusState} />
@@ -326,16 +365,21 @@ export default function AudioMonitor({ pipelineAudio }) {
             analyzing: '分析中...',
             error: '错误',
           }[statusState]}</span>
-          {status && (
+          {audioStatus && (
             <span className="audio-status-detail">
-              {status.model_type} | {status.sample_rate}Hz | {'模型已加载: ' + (status.model_loaded ? '是' : '否')}
+              {audioStatus.model_type} | {audioStatus.sample_rate}Hz | 模型{audioStatus.model_loaded ? '已加载' : '加载中'}
+            </span>
+          )}
+          {monitorMode === 'video' && isRunning && (
+            <span className="audio-status-detail audio-live-tag">
+              <span className="live-dot" /> 管线监测中
             </span>
           )}
         </div>
+
         <div className="audio-actions">
           <input
-            type="file"
-            accept=".wav,.flac,.ogg,audio/*"
+            type="file" accept=".wav,.flac,.ogg,audio/*"
             onChange={handleFileUpload}
             disabled={uploading}
             style={{ display: 'none' }}
@@ -344,16 +388,25 @@ export default function AudioMonitor({ pipelineAudio }) {
           <button
             className="btn btn-secondary"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading || recording}
+            disabled={uploading || recording || monitorMode === 'video'}
           >
             {uploading ? '分析中...' : '上传音频文件'}
           </button>
+
+          {/* 两个监测按钮 */}
           <button
-            className={`btn ${recording ? 'btn-danger' : 'btn-primary'}`}
-            onClick={recording ? stopRecording : startRecording}
-            disabled={uploading}
+            className={`btn ${monitorMode === 'browser' ? 'btn-danger' : 'btn-primary'}`}
+            onClick={toggleBrowserMode}
+            disabled={uploading || monitorMode === 'video'}
           >
-            {recording ? '■ 停止录音' : '开始实时监测'}
+            {monitorMode === 'browser' ? '■ 停止' : '🎤 浏览器收音'}
+          </button>
+          <button
+            className={`btn ${monitorMode === 'video' ? 'btn-danger' : 'btn-primary'}`}
+            onClick={toggleVideoMode}
+            disabled={uploading || recording}
+          >
+            {monitorMode === 'video' ? '■ 停止' : '📹 视频源收音'}
           </button>
         </div>
       </div>
@@ -365,23 +418,29 @@ export default function AudioMonitor({ pipelineAudio }) {
       <div className="pipeline-audio-section">
         <div className="pipeline-audio-header">
           <h4>音频分析结果</h4>
-          {pipelineAudio?.enabled && (
-            <span className="pipeline-audio-live">
-              <span className="live-dot" /> 管线监测中
-            </span>
+          {monitorMode === 'video' && isRunning && (
+            <span className="pipeline-audio-live"><span className="live-dot" /> 视频源音频</span>
           )}
-          {!pipelineAudio?.enabled && results && (
-            <span className="pipeline-audio-source-tag">本地分析</span>
+          {monitorMode === 'browser' && (
+            <span className="pipeline-audio-source-tag">浏览器麦克风</span>
+          )}
+          {monitorMode === 'idle' && !activeResult && (
+            <span className="pipeline-audio-source-tag">等待分析</span>
           )}
         </div>
 
         {(() => {
-          const activeResult = pipelineAudio?.lastResult || results
           if (!activeResult) {
             return (
               <div className="audio-empty">
                 <span className="empty-icon">🎧</span>
-                <span>{pipelineAudio?.enabled ? '等待音频数据...' : '上传音频或开始录音查看分析结果'}</span>
+                <span>
+                  {monitorMode === 'video' && !isRunning
+                    ? '请点击「视频源收音」启动监控'
+                    : monitorMode === 'browser'
+                      ? '录音后自动上传分析'
+                      : '选择监测模式开始分析'}
+                </span>
               </div>
             )
           }
@@ -389,17 +448,12 @@ export default function AudioMonitor({ pipelineAudio }) {
           return (
             <div className="pipeline-audio-content">
               <div className="pipeline-audio-meta">
-                {pipelineAudio?.enabled ? (
-                  <div className="pipeline-audio-source">
-                    <span className="meta-label">音频来源</span>
-                    <span className="meta-value">{pipelineAudio.source || '未知'}</span>
-                  </div>
-                ) : (
-                  <div className="pipeline-audio-source">
-                    <span className="meta-label">分析来源</span>
-                    <span className="meta-value">本地 {recording ? '麦克风' : '文件上传'}</span>
-                  </div>
-                )}
+                <div className="pipeline-audio-source">
+                  <span className="meta-label">分析来源</span>
+                  <span className="meta-value">
+                    {monitorMode === 'video' ? `视频源 ${pipelineAudio?.source || ''}` : '浏览器麦克风'}
+                  </span>
+                </div>
                 <div className="pipeline-audio-duration">
                   <span className="meta-label">音频时长</span>
                   <span className="meta-value">{activeResult.duration_sec?.toFixed(1)}s</span>
@@ -408,15 +462,15 @@ export default function AudioMonitor({ pipelineAudio }) {
                   <span className="meta-label">分析耗时</span>
                   <span className="meta-value">{activeResult.elapsed_ms?.toFixed(0)}ms</span>
                 </div>
-                {pipelineAudio?.enabled && (
+                {monitorMode === 'video' && (
                   <div className="pipeline-audio-chunks">
                     <span className="meta-label">已处理</span>
-                    <span className="meta-value">{pipelineAudio.chunksProcessed || 0} 块</span>
+                    <span className="meta-value">{pipelineAudio?.chunksProcessed || 0} 块</span>
                   </div>
                 )}
               </div>
 
-              {pipelineAudio?.error && (
+              {pipelineAudio?.error && monitorMode === 'video' && (
                 <div className="pipeline-audio-error">
                   <span className="error-icon">⚠️</span> {pipelineAudio.error}
                 </div>
@@ -479,7 +533,7 @@ export default function AudioMonitor({ pipelineAudio }) {
       <div className="audio-config-panel">
         <h4>音频分析配置</h4>
         <div className="config-grid">
-          {status && Object.entries(status).map(([key, value]) => (
+          {audioStatus && Object.entries(audioStatus).map(([key, value]) => (
             <div key={key} className="config-item">
               <span className="config-label">{key}</span>
               <span className="config-value">{String(value)}</span>

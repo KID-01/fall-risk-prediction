@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 
 from src.api.routes import monitor
 from src.ezviz.client import EzvizClient
+from src.utils.logger import get_logger
+
+log = get_logger(__name__)
 
 ezviz_router = APIRouter(prefix="/api/v1/ezviz", tags=["萤石设备"])
 
@@ -153,30 +156,24 @@ async def start_monitor(
 
     if body.audio_source == "off":
         audio_source = "off"
-    elif body.audio_source == "mic":
-        audio_source = "mic"
-    elif body.audio_source == "camera":
-        # 监控收音: 显式获取 RTSP 音频流, 失败报错
+    elif body.audio_source == "video_source":
+        audio_source = analysis_url
         try:
             rtsp_url = await asyncio.wait_for(
                 client.get_rtsp_url(serial, body.channel_no), timeout=5.0
             )
-            if rtsp_url and rtsp_url.lower().startswith("rtsp://"):
+            if rtsp_url:
+                log.info(f"音频源使用 RTSP 地址: {rtsp_url[:60]}...")
                 audio_source = rtsp_url
-            else:
-                raise HTTPException(status_code=502, detail="未获取到 RTSP 音频流地址")
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail="获取监控音频流失败") from exc
+        except Exception:
+            pass
     elif body.audio_source in ("auto", ""):
-        # 自动模式: 优先尝试 RTSP (有独立音频流), 失败直接关音频, 不阻塞启动
         audio_source = "off"
         try:
             rtsp_url = await asyncio.wait_for(
                 client.get_rtsp_url(serial, body.channel_no), timeout=5.0
             )
-            if rtsp_url and rtsp_url.lower().startswith("rtsp://"):
+            if rtsp_url and "://" in rtsp_url.lower():
                 audio_source = rtsp_url
         except Exception:
             pass
