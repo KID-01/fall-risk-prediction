@@ -24,7 +24,7 @@ class EzvizPlayerRequest(BaseModel):
 
 class EzvizMonitorRequest(EzvizPlayerRequest):
     person_id: str = Field(default="default", min_length=1, max_length=128)
-    audio_source: str = Field(default="", max_length=256)
+    audio_source: str = Field(default="off", max_length=256)
 
 
 def _device_id(serial: str) -> str:

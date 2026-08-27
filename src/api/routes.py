@@ -30,6 +30,10 @@ class PredictRequest(BaseModel):
     video_url: str | None = None
 
 
+class AudioStreamRequest(BaseModel):
+    audio_source: str = "video_source"
+
+
 # ── 监控路由 ──
 
 monitor_router = APIRouter(prefix="/api/v1", tags=["监控"])
@@ -65,6 +69,34 @@ async def stream_stop():
     """停止视频流分析"""
     monitor.stop()
     return {"code": 200, "message": "监控已停止"}
+
+
+@monitor_router.post("/stream/audio/start")
+async def stream_audio_start(req: AudioStreamRequest | None = None):
+    """在不重启视频监控的情况下启动音频分支。"""
+    if not monitor.status.is_running:
+        raise HTTPException(status_code=409, detail="视频监控尚未启动")
+    if monitor.status.audio_enabled:
+        raise HTTPException(status_code=409, detail="音频监测已在运行")
+    audio_source = req.audio_source if req else "video_source"
+    if not monitor.start_audio(audio_source):
+        raise HTTPException(
+            status_code=503,
+            detail=monitor.status.audio_error or "音频监测启动失败",
+        )
+    return {
+        "code": 200,
+        "message": "音频监测已启动",
+        "audio_status": monitor.status.audio_status,
+        "audio_source": monitor.status.audio_source,
+    }
+
+
+@monitor_router.post("/stream/audio/stop")
+async def stream_audio_stop():
+    """停止音频分支，视频监控保持运行。"""
+    monitor.stop_audio()
+    return {"code": 200, "message": "音频监测已停止", "audio_status": "DISABLED"}
 
 
 @monitor_router.get("/risk/current")

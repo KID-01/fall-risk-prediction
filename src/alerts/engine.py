@@ -85,6 +85,7 @@ class AlertEngine:
         # 音频触发预警阈值
         self.impact_critical_threshold = float(alert_cfg.audio.impact_critical_threshold)
         self.vocal_attention_threshold = float(alert_cfg.audio.vocal_attention_threshold)
+        self.audio_cooldown_seconds = float(alert_cfg.audio.get("cooldown_seconds", 30))
 
         self._short_term_count_hourly = 0      # 每小时短期偏离计数
         self._last_reset_time = 0.0            # 上次计数重置时间
@@ -97,6 +98,8 @@ class AlertEngine:
         }
         self._event_log: list[AlertEvent] = []
         self._event_log_lock = threading.Lock()
+        self._audio_cooldown_lock = threading.Lock()
+        self._last_audio_alert_at: dict[SoundCategory, float] = {}
 
     def register_action(self, level: RiskLevel, action: AlertAction):
         """注册某等级的响应动作"""
@@ -107,8 +110,36 @@ class AlertEngine:
         self._short_term_count_hourly = 0
         self._last_reset_time = 0.0
         self._last_activity_time = 0.0
+        with self._audio_cooldown_lock:
+            self._last_audio_alert_at.clear()
         with self._event_log_lock:
             self._event_log.clear()
+
+    def _eligible_audio_events(
+        self, audio_events: list[AudioEvent] | None, timestamp: float
+    ) -> list[AudioEvent]:
+        """过滤未达到告警阈值或仍处于同类冷却期的音频事件。"""
+        if not audio_events:
+            return []
+
+        eligible: list[AudioEvent] = []
+        with self._audio_cooldown_lock:
+            for audio_event in audio_events:
+                triggers = (
+                    audio_event.category == SoundCategory.IMPACT
+                    and audio_event.score >= self.impact_critical_threshold
+                ) or (
+                    audio_event.category == SoundCategory.VOCAL_DISTRESS
+                    and audio_event.score >= self.vocal_attention_threshold
+                )
+                if not triggers:
+                    continue
+                last_at = self._last_audio_alert_at.get(audio_event.category)
+                if last_at is not None and timestamp - last_at < self.audio_cooldown_seconds:
+                    continue
+                self._last_audio_alert_at[audio_event.category] = timestamp
+                eligible.append(audio_event)
+        return eligible
 
     def evaluate(
         self,
@@ -174,8 +205,9 @@ class AlertEngine:
             message = "所有特征正常"
 
         # 音频事件升级逻辑
-        if audio_events:
-            for event in audio_events:
+        eligible_audio_events = self._eligible_audio_events(audio_events, timestamp)
+        if eligible_audio_events:
+            for event in eligible_audio_events:
                 if event.category == SoundCategory.IMPACT and event.score >= self.impact_critical_threshold:
                     # 撞击声达到阈值 → 直接升级为 CRITICAL
                     if level.priority < RiskLevel.CRITICAL.priority:
@@ -216,7 +248,7 @@ class AlertEngine:
         level = RiskLevel.LOW
         message = "音频事件正常"
 
-        for event in audio_events:
+        for event in self._eligible_audio_events(audio_events, timestamp):
             if event.category == SoundCategory.IMPACT and event.score >= self.impact_critical_threshold:
                 if level.priority < RiskLevel.CRITICAL.priority:
                     level = RiskLevel.CRITICAL

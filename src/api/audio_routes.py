@@ -41,12 +41,7 @@ def get_analyzer() -> AudioAnalyzer:
 @audio_router.get("/status")
 async def audio_status() -> dict[str, Any]:
     analyzer = get_analyzer()
-    checkpoint_exists = Path(analyzer.checkpoint_path).expanduser().is_file()
-    if checkpoint_exists and analyzer.enabled and not analyzer.model_loaded:
-        try:
-            await asyncio.to_thread(analyzer._ensure_model)
-        except Exception as exc:
-            log.warning(f"模型预加载失败: {exc}")
+    resources = analyzer.resource_status()
     return {
         "enabled": analyzer.enabled,
         "model_type": analyzer.model_type,
@@ -57,8 +52,17 @@ async def audio_status() -> dict[str, Any]:
         "min_event_score": analyzer.min_event_score,
         "vocal_distress_threshold": analyzer.vocal_threshold,
         "impact_threshold": analyzer.impact_threshold,
-        "checkpoint_exists": checkpoint_exists,
+        **resources,
         "model_loaded": analyzer.model_loaded,
+        "model_status": (
+            "DISABLED"
+            if not analyzer.enabled
+            else "UNAVAILABLE"
+            if not resources["resources_ready"]
+            else "LOADED"
+            if analyzer.model_loaded
+            else "READY"
+        ),
     }
 
 

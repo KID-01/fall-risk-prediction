@@ -169,6 +169,19 @@ class AudioAnalyzer:
         self._lock = threading.Lock()
 
     @property
+    def labels_path(self) -> Path:
+        return getattr(self, "_labels_path", Path.home() / "panns_data" / "class_labels_indices.csv")
+
+    def resource_status(self) -> dict[str, bool]:
+        checkpoint_exists = Path(self.checkpoint_path).expanduser().is_file()
+        labels_exist = self.labels_path.is_file()
+        return {
+            "checkpoint_exists": checkpoint_exists,
+            "labels_exist": labels_exist,
+            "resources_ready": checkpoint_exists and labels_exist,
+        }
+
+    @property
     def enabled(self) -> bool:
         """音频分析是否启用"""
         return self._enabled
@@ -297,7 +310,7 @@ class AudioAnalyzer:
                 raise RuntimeError(
                     f"checkpoint 不存在: {checkpoint} — 请下载 Cnn14_mAP=0.431.pth 并放置到该路径"
                 )
-            labels_csv = Path.home() / "panns_data" / "class_labels_indices.csv"
+            labels_csv = self.labels_path
             if not labels_csv.is_file():
                 raise RuntimeError(
                     f"标签文件不存在: {labels_csv} — 请放置 class_labels_indices.csv (527 类)"

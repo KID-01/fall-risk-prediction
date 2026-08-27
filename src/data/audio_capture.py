@@ -200,9 +200,10 @@ class AudioCapture:
             # 迭代器结束/异常时不自动 close, 由外部控制
             pass
 
-    def close(self):
+    def close(self, signal_stop: bool = True):
         """释放资源, 幂等"""
-        self.stop_event.set()
+        if signal_stop:
+            self.stop_event.set()
 
         if self._mic_stream is not None:
             try:

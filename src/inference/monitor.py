@@ -47,6 +47,7 @@ class MonitorStatus:
     baseline_samples: int = 0
     recent_keypoints: list[KeypointFrame] = field(default_factory=list)
     audio_enabled: bool = False
+    audio_status: str = "DISABLED"
     audio_source: str = ""
     last_audio_result: AudioAnalysisResult | None = None
     audio_chunks_processed: int = 0
@@ -97,8 +98,41 @@ class FallRiskMonitor:
         # 运行控制
         self._thread: threading.Thread | None = None
         self._stop_flag = threading.Event()
+        self._audio_stop_flag = threading.Event()
         self._keypoint_buffer: list[KeypointFrame] = []
         self._buffer_window = 30  # 特征计算窗口帧数
+
+    @staticmethod
+    def _resolve_audio_source(video_source: str, requested_source: str | None) -> str:
+        requested = (requested_source or "off").strip()
+        lowered = requested.lower()
+        video_lower = video_source.lower()
+
+        if lowered in ("", "off"):
+            return "off"
+        if lowered == "mic":
+            return "mic"
+        if lowered in ("video_source", "camera"):
+            if "://" not in video_lower:
+                raise ValueError("视频源收音仅支持 RTSP、RTMP 或 HTTP 网络流")
+            return video_source
+        if lowered == "auto":
+            return video_source if "://" in video_lower else "off"
+        if "://" in lowered:
+            return requested
+        if requested:
+            return requested
+        return "off"
+
+    def _build_audio_capture(self, source: str) -> AudioCapture:
+        return AudioCapture(
+            source=source,
+            sample_rate=int(self.config.audio.sample_rate),
+            chunk_seconds=int(self.config.audio.chunk_seconds),
+            input_device=self.config.audio.get("input_device"),
+            ffmpeg_path=str(self.config.audio.get("ffmpeg_path", "")),
+            stop_event=self._audio_stop_flag,
+        )
 
     def start(
         self,
@@ -119,22 +153,12 @@ class FallRiskMonitor:
 
         audio_cfg_enabled = self.config.get("audio", {}).get("enabled", False)
         cfg_audio_source = self.config.get("audio", {}).get("source", "off")
-        effective_audio_source = audio_source if audio_source is not None else cfg_audio_source
-
-        if effective_audio_source not in ("off", ""):
-            if "://" in effective_audio_source.lower():
-                pass  # 已经是有效 URL，保持不变
-            elif "://" in source.lower():
-                effective_audio_source = source
-            else:
-                effective_audio_source = "off"
-        elif effective_audio_source == "camera":
-            src_lower = source.lower()
-            if src_lower.startswith(("rtsp://", "rtmp://")):
-                effective_audio_source = source
-            else:
-                log.error("监控收音模式要求视频源为 RTSP/RTMP 地址")
-                return False
+        requested_audio_source = audio_source if audio_source is not None else cfg_audio_source
+        try:
+            effective_audio_source = self._resolve_audio_source(source, requested_audio_source)
+        except ValueError as exc:
+            log.error(str(exc))
+            return False
 
         audio_enabled = audio_cfg_enabled and effective_audio_source not in ("off", "")
 
@@ -144,49 +168,107 @@ class FallRiskMonitor:
             device_id=device_id,
             source=source,
             audio_enabled=audio_enabled,
+            audio_status="STARTING" if audio_enabled else "DISABLED",
             audio_source=effective_audio_source if audio_enabled else "",
         )
         self._stop_flag.clear()
+        if not hasattr(self, "_audio_stop_flag"):
+            self._audio_stop_flag = threading.Event()
+        self._audio_stop_flag.clear()
 
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
         if audio_enabled:
-            self.audio_analyzer = AudioAnalyzer()
-            self.audio_capture = AudioCapture(
-                source=effective_audio_source,
-                sample_rate=int(self.config.audio.sample_rate),
-                chunk_seconds=int(self.config.audio.chunk_seconds),
-                input_device=self.config.audio.get("input_device"),
-                ffmpeg_path=str(self.config.audio.get("ffmpeg_path", "")),
-                stop_event=self._stop_flag,
-            )
-            self._audio_thread = threading.Thread(target=self._run_audio, daemon=True)
-            self._audio_thread.start()
+            self._start_audio_thread(effective_audio_source)
 
         return True
 
     def stop(self):
         """停止监控"""
         self._stop_flag.set()
+        self.stop_audio()
         if self._thread:
             self._thread.join(timeout=5)
-        if self._audio_thread:
-            self._audio_thread.join(timeout=5)
-            self._audio_thread = None
         self.status.is_running = False
-        if self.audio_capture:
-            self.audio_capture.close()
-            self.audio_capture = None
         if self.video_capture:
             self.video_capture.close()
             self.video_capture = None
 
+    def _start_audio_thread(self, audio_source: str) -> bool:
+        self.audio_analyzer = AudioAnalyzer()
+        resources = self.audio_analyzer.resource_status()
+        if not resources["resources_ready"]:
+            missing = []
+            if not resources["checkpoint_exists"]:
+                missing.append("PANNs checkpoint")
+            if not resources["labels_exist"]:
+                missing.append("AudioSet 标签文件")
+            self.status.audio_enabled = False
+            self.status.audio_status = "UNAVAILABLE"
+            self.status.audio_error = f"缺少音频资源: {', '.join(missing)}"
+            return False
+
+        self.status.audio_enabled = True
+        self.status.audio_status = "STARTING"
+        self.status.audio_source = audio_source
+        self.status.audio_error = None
+        self._audio_stop_flag.clear()
+        self.audio_capture = self._build_audio_capture(audio_source)
+        self._audio_thread = threading.Thread(target=self._run_audio, daemon=True)
+        self._audio_thread.start()
+        return True
+
+    def start_audio(self, audio_source: str = "video_source") -> bool:
+        """在视频监控运行期间单独启动音频分支。"""
+        if not self.status.is_running:
+            self.status.audio_status = "UNAVAILABLE"
+            self.status.audio_error = "视频监控尚未启动"
+            return False
+        if self._audio_thread and self._audio_thread.is_alive():
+            return False
+        if not bool(self.config.get("audio", {}).get("enabled", False)):
+            self.status.audio_status = "UNAVAILABLE"
+            self.status.audio_error = "音频分析已在配置中禁用"
+            return False
+        try:
+            resolved = self._resolve_audio_source(self.status.source, audio_source)
+        except ValueError as exc:
+            self.status.audio_status = "UNAVAILABLE"
+            self.status.audio_error = str(exc)
+            return False
+        if resolved == "off":
+            self.status.audio_status = "DISABLED"
+            self.status.audio_error = None
+            return False
+        return self._start_audio_thread(resolved)
+
+    def stop_audio(self):
+        """只停止音频分支，不影响视频监控。"""
+        if not hasattr(self, "_audio_stop_flag"):
+            self._audio_stop_flag = threading.Event()
+        self._audio_stop_flag.set()
+        capture = self.audio_capture
+        if capture is not None:
+            capture.close()
+        if self._audio_thread and self._audio_thread is not threading.current_thread():
+            self._audio_thread.join(timeout=3)
+        self._audio_thread = None
+        self.audio_capture = None
+        self.audio_analyzer = None
+        self.status.audio_enabled = False
+        if self.status.audio_status != "UNAVAILABLE":
+            self.status.audio_status = "DISABLED"
+            self.status.audio_error = None
+        self.status.audio_source = ""
+        with self.status._audio_lock:
+            self.status._pending_audio_events.clear()
+
     def _run(self):
         """监控主循环(在子线程运行)"""
         inference_interval = self.config.inference.inference_interval_ms / 1000
-        person_id = self.person_id
-        device_id = self.device_id
+        person_id = getattr(self, "person_id", "default")
+        device_id = getattr(self, "device_id", "default")
         _last_broadcast = 0.0
         _last_raw_broadcast = 0.0
 
@@ -263,8 +345,16 @@ class FallRiskMonitor:
                             self.status.baseline_samples = baseline.sample_count
 
                         # 从音频线程排空待处理事件, 用于视频偏差联合评估
+                        now_timestamp = time.time()
+                        merge_window = float(
+                            self.config.alert.audio.get("merge_window_seconds", 15)
+                        )
                         with self.status._audio_lock:
-                            pending_events = list(self.status._pending_audio_events)
+                            pending_events = [
+                                event
+                                for event in self.status._pending_audio_events
+                                if 0 <= now_timestamp - event.timestamp <= merge_window
+                            ]
                             self.status._pending_audio_events.clear()
 
                         if baseline.is_ready:
@@ -272,7 +362,7 @@ class FallRiskMonitor:
                             self.status.last_deviation = deviation
 
                             alert = self.alert_engine.evaluate(
-                                deviation, feature.timestamp,
+                                deviation, now_timestamp,
                                 has_activity=True,
                                 audio_events=pending_events or None,
                             )
@@ -313,19 +403,42 @@ class FallRiskMonitor:
 
     def _run_audio(self):
         """音频采集+分析循环(独立线程, 与视频并行)"""
+        if not hasattr(self, "_audio_stop_flag"):
+            self._audio_stop_flag = threading.Event()
         if self.audio_capture is None or self.audio_analyzer is None:
             return
 
-        person_id = self.person_id
-        device_id = self.device_id
+        person_id = getattr(self, "person_id", "default")
+        device_id = getattr(self, "device_id", "default")
+
+        config_audio = getattr(getattr(self, "config", None), "audio", None)
+        try:
+            reconnect_attempts = int(config_audio.get("reconnect_attempts", 3)) if config_audio else 3
+        except (TypeError, ValueError):
+            reconnect_attempts = 3
+        try:
+            reconnect_delay = float(config_audio.get("reconnect_delay_seconds", 2)) if config_audio else 2.0
+        except (TypeError, ValueError):
+            reconnect_delay = 2.0
+        source = self.status.audio_source
+        is_network = "://" in source.lower()
+        attempt = 0
 
         try:
-            baseline = self.baseline_manager.load_baseline(person_id)
-            _chunks_since_reload = 0
+            baseline_manager = getattr(self, "baseline_manager", None)
+            baseline = baseline_manager.load_baseline(person_id) if baseline_manager else None
+            chunks_since_reload = 0
 
-            with self.audio_capture:
-                for chunk in self.audio_capture.chunks():
-                    if self._stop_flag.is_set():
+            while not self._audio_stop_flag.is_set():
+                capture = self.audio_capture or self._build_audio_capture(source)
+                self.audio_capture = capture
+                if not capture.open():
+                    raise RuntimeError(f"无法打开音频源: {source}")
+                self.status.audio_status = "RUNNING"
+                self.status.audio_error = None
+
+                for chunk in capture.chunks():
+                    if self._audio_stop_flag.is_set():
                         break
 
                     try:
@@ -334,23 +447,20 @@ class FallRiskMonitor:
                         )
                         self.status.last_audio_result = result
                         self.status.audio_chunks_processed += 1
-                        _chunks_since_reload += 1
+                        chunks_since_reload += 1
 
-                        if _chunks_since_reload >= 6:
-                            baseline = self.baseline_manager.load_baseline(person_id)
-                            _chunks_since_reload = 0
+                        if chunks_since_reload >= 6:
+                            baseline = baseline_manager.load_baseline(person_id) if baseline_manager else None
+                            chunks_since_reload = 0
 
                         if result.events:
-                            with self.status._audio_lock:
-                                self.status._pending_audio_events.extend(result.events)
-                                if len(self.status._pending_audio_events) > 100:
-                                    self.status._pending_audio_events = self.status._pending_audio_events[-100:]
-
                             if not baseline or not baseline.is_ready:
                                 audio_alert = self.alert_engine.evaluate_audio_only(
                                     result.events, chunk.timestamp,
                                 )
                                 if audio_alert.level != RiskLevel.LOW:
+                                    self.status.last_alert = audio_alert
+                                    self.status.current_risk_level = audio_alert.level
                                     try:
                                         db = Database()
                                         db.insert_alert_event(
@@ -362,6 +472,11 @@ class FallRiskMonitor:
                                         )
                                     except Exception as e:
                                         log.error(f"音频告警持久化失败: {e}")
+                            else:
+                                with self.status._audio_lock:
+                                    self.status._pending_audio_events.extend(result.events)
+                                    if len(self.status._pending_audio_events) > 100:
+                                        self.status._pending_audio_events = self.status._pending_audio_events[-100:]
 
                             try:
                                 db = Database()
@@ -376,9 +491,29 @@ class FallRiskMonitor:
                     except Exception as e:
                         self.status.audio_error = str(e)
                         log.error(f"音频分析失败: {e}")
+                capture.close(signal_stop=False)
+                self.audio_capture = None
+                if self._audio_stop_flag.is_set() or not is_network:
+                    break
+                attempt += 1
+                if attempt > reconnect_attempts:
+                    raise RuntimeError(f"网络音频重连失败，已尝试 {reconnect_attempts} 次")
+                self.status.audio_status = "STARTING"
+                self.status.audio_error = f"网络音频中断，正在进行第 {attempt} 次重连"
+                if self._audio_stop_flag.wait(reconnect_delay):
+                    break
         except Exception as e:
             self.status.audio_error = str(e)
+            self.status.audio_status = "UNAVAILABLE"
+            self.status.audio_enabled = False
             log.error(f"音频采集线程异常: {e}")
+        finally:
+            if self.audio_capture:
+                self.audio_capture.close(signal_stop=False)
+                self.audio_capture = None
+            if self.status.audio_status == "RUNNING":
+                self.status.audio_status = "DISABLED" if not is_network or self._audio_stop_flag.is_set() else "UNAVAILABLE"
+                self.status.audio_enabled = False
 
     def get_status(self) -> dict:
         """获取监控状态"""
@@ -423,6 +558,7 @@ class FallRiskMonitor:
                 else None
             ),
             "audio_enabled": self.status.audio_enabled,
+            "audio_status": self.status.audio_status,
             "audio_source": self.status.audio_source,
             "audio_chunks_processed": self.status.audio_chunks_processed,
             "audio_error": self.status.audio_error,
