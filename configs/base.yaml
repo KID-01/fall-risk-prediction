@@ -47,6 +47,37 @@ pose_estimation:
   min_visible_lower_keypoints: 4         # 下肢6个关键点至少可见4个
   smoothing: true                        # 关键点平滑
 
+# ── 环境风险感知 (COCO目标 + 人物邻近关系) ──
+# 下列分数均为工程启发分，不是校准跌倒概率。
+environment:
+  enabled: true
+  model_path: "checkpoints/yolo26n.pt"
+  device: "cpu"
+  confidence_threshold: 0.25
+  person_confidence_threshold: 0.25
+  image_size: 640
+  analysis_interval_ms: 1000             # 独立线程每秒最多分析一次
+  result_max_age_seconds: 3
+  persistence_frames: 3
+  alert_cooldown_seconds: 30
+  motion_thresholds: [0.3, 0.6]
+  environment_thresholds: [0.4, 0.7]
+  object_confidence_threshold: 0.25
+  near_threshold: 0.4
+  far_threshold: 1.5
+  foot_band_gate: true
+  top_k_hazards: 3
+  object_risk_table:
+    chair: 0.6
+    couch: 0.4
+    bed: 0.3
+    dining table: 0.5
+    backpack: 0.5
+    suitcase: 0.7
+    sports ball: 0.7
+    laptop: 0.3
+  neutral_classes: ["tv", "remote", "dog"]
+
 # ── 关键点索引定义 (MediaPipe Pose 33点) ──
 keypoints:
   nose: 0

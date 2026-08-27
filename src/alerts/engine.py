@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING
 
 import numpy as np
 from omegaconf import OmegaConf
@@ -21,6 +22,9 @@ from omegaconf import OmegaConf
 from src.inference.audio_analyzer import AudioEvent, SoundCategory
 from src.inference.deviation import DeviationLevel, DeviationResult
 from src.utils.config import get_config
+
+if TYPE_CHECKING:
+    from src.inference.environment_analyzer import EnvironmentAnalysisResult
 
 
 class RiskLevel(Enum):
@@ -61,6 +65,7 @@ class AlertEvent:
     deviation: DeviationResult | None = None
     video_clip_path: str | None = None
     notified: bool = False
+    notification_suppressed: bool = False
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
@@ -86,6 +91,10 @@ class AlertEngine:
         self.impact_critical_threshold = float(alert_cfg.audio.impact_critical_threshold)
         self.vocal_attention_threshold = float(alert_cfg.audio.vocal_attention_threshold)
         self.audio_cooldown_seconds = float(alert_cfg.audio.get("cooldown_seconds", 30))
+        environment_cfg = cfg.get("environment", {})
+        self.environment_cooldown_seconds = float(
+            environment_cfg.get("alert_cooldown_seconds", 30)
+        )
 
         self._short_term_count_hourly = 0      # 每小时短期偏离计数
         self._last_reset_time = 0.0            # 上次计数重置时间
@@ -100,6 +109,7 @@ class AlertEngine:
         self._event_log_lock = threading.Lock()
         self._audio_cooldown_lock = threading.Lock()
         self._last_audio_alert_at: dict[SoundCategory, float] = {}
+        self._last_environment_alert_at: dict[str, float] = {}
 
     def register_action(self, level: RiskLevel, action: AlertAction):
         """注册某等级的响应动作"""
@@ -112,6 +122,7 @@ class AlertEngine:
         self._last_activity_time = 0.0
         with self._audio_cooldown_lock:
             self._last_audio_alert_at.clear()
+            self._last_environment_alert_at.clear()
         with self._event_log_lock:
             self._event_log.clear()
 
@@ -147,6 +158,7 @@ class AlertEngine:
         timestamp: float,
         has_activity: bool = True,
         audio_events: list[AudioEvent] | None = None,
+        environment_result: EnvironmentAnalysisResult | None = None,
     ) -> AlertEvent:
         """
         评估风险等级并生成预警事件
@@ -156,6 +168,7 @@ class AlertEngine:
             timestamp: 当前时间戳
             has_activity: 当前是否有活动(用于无活动检测)
             audio_events: 音频分析检测到的事件列表 (可选)
+            environment_result: 环境与运动启发式融合结果 (可选)
         Returns:
             AlertEvent
         """
@@ -219,15 +232,47 @@ class AlertEngine:
                         level = RiskLevel.ATTENTION
                     message += f" | 人声呼救: {event.label} ({event.score:.2f})"
 
+        # 环境分支只能在运动信号同时达到阈值时升级告警。环境物体本身不报警。
+        environment_notification_suppressed = False
+        if environment_result is not None:
+            target_level = {
+                "MEDIUM": RiskLevel.ATTENTION,
+                "HIGH": RiskLevel.CRITICAL,
+            }.get(environment_result.overall_state)
+            if target_level is not None and target_level.priority > level.priority:
+                level = target_level
+                hazards = ", ".join(
+                    item.get("class", "unknown")
+                    for item in environment_result.top_hazards[:3]
+                )
+                detail = f"，邻近危险物: {hazards}" if hazards else ""
+                message += (
+                    f" | 运动与环境联合风险 {environment_result.overall_state}{detail}"
+                )
+                with self._audio_cooldown_lock:
+                    last_at = self._last_environment_alert_at.get(
+                        environment_result.overall_state
+                    )
+                    if (
+                        last_at is not None
+                        and timestamp - last_at < self.environment_cooldown_seconds
+                    ):
+                        environment_notification_suppressed = True
+                    else:
+                        self._last_environment_alert_at[
+                            environment_result.overall_state
+                        ] = timestamp
+
         event = AlertEvent(
             level=level,
             timestamp=timestamp,
             message=message,
             deviation=deviation,
+            notification_suppressed=environment_notification_suppressed,
         )
 
         # 执行响应动作(关注级及以上)
-        if level.priority > 0:
+        if level.priority > 0 and not event.notification_suppressed:
             for action in self._actions[level]:
                 try:
                     action(event)

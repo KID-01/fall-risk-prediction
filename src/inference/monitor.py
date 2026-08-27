@@ -8,6 +8,8 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass, field
+from queue import Empty, Full, Queue
+from typing import Any
 
 from src.alerts.engine import AlertEngine, AlertEvent, RiskLevel
 from src.api.database import Database
@@ -20,6 +22,7 @@ from src.data.video_capture import VideoCapture
 from src.inference.audio_analyzer import AudioAnalysisResult, AudioAnalyzer, AudioEvent
 from src.inference.baseline import BaselineManager
 from src.inference.deviation import DeviationDetector, DeviationResult
+from src.inference.environment_analyzer import EnvironmentAnalysisResult, EnvironmentRiskAnalyzer
 from src.inference.features import FeatureCalculator, FeatureVector
 from src.utils.config import get_config
 from src.utils.draw import draw_overlay, encode_jpeg
@@ -54,6 +57,11 @@ class MonitorStatus:
     audio_error: str | None = None
     _pending_audio_events: list[AudioEvent] = field(default_factory=list)
     _audio_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    environment_enabled: bool = False
+    environment_status: str = "DISABLED"
+    environment_error: str | None = None
+    last_environment_result: EnvironmentAnalysisResult | None = None
+    _environment_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
 class FallRiskMonitor:
@@ -95,6 +103,13 @@ class FallRiskMonitor:
         self.audio_capture: AudioCapture | None = None
         self._audio_thread: threading.Thread | None = None
 
+        # 环境检测使用独立单帧队列，避免第二个 YOLO 模型阻塞视频主链。
+        self.environment_analyzer: EnvironmentRiskAnalyzer | None = None
+        self._environment_thread: threading.Thread | None = None
+        self._environment_queue: Queue[tuple[Any, float]] = Queue(maxsize=1)
+        self._environment_stop_flag = threading.Event()
+        self._environment_last_submit = 0.0
+
         # 运行控制
         self._thread: threading.Thread | None = None
         self._stop_flag = threading.Event()
@@ -134,6 +149,19 @@ class FallRiskMonitor:
             stop_event=self._audio_stop_flag,
         )
 
+    def _ensure_environment_runtime(self) -> None:
+        """Initialize environment runtime fields for legacy fixtures and reloads."""
+        if not hasattr(self, "environment_analyzer"):
+            self.environment_analyzer = None
+        if not hasattr(self, "_environment_thread"):
+            self._environment_thread = None
+        if not hasattr(self, "_environment_queue"):
+            self._environment_queue = Queue(maxsize=1)
+        if not hasattr(self, "_environment_stop_flag"):
+            self._environment_stop_flag = threading.Event()
+        if not hasattr(self, "_environment_last_submit"):
+            self._environment_last_submit = 0.0
+
     def start(
         self,
         source: str,
@@ -145,6 +173,7 @@ class FallRiskMonitor:
         if self.status.is_running:
             return False
 
+        self._ensure_environment_runtime()
         self._keypoint_buffer.clear()
         self.deviation_detector.reset()
         self.alert_engine.reset()
@@ -161,6 +190,11 @@ class FallRiskMonitor:
             return False
 
         audio_enabled = audio_cfg_enabled and effective_audio_source not in ("off", "")
+        environment_cfg = self.config.get("environment", {})
+        environment_enabled = bool(
+            environment_cfg.get("enabled", False)
+            and environment_cfg.get("model_path")
+        )
 
         self.status = MonitorStatus(
             is_running=True,
@@ -170,11 +204,16 @@ class FallRiskMonitor:
             audio_enabled=audio_enabled,
             audio_status="STARTING" if audio_enabled else "DISABLED",
             audio_source=effective_audio_source if audio_enabled else "",
+            environment_enabled=environment_enabled,
+            environment_status="STARTING" if environment_enabled else "DISABLED",
         )
         self._stop_flag.clear()
         if not hasattr(self, "_audio_stop_flag"):
             self._audio_stop_flag = threading.Event()
         self._audio_stop_flag.clear()
+
+        if environment_enabled:
+            self._start_environment_thread()
 
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -188,6 +227,7 @@ class FallRiskMonitor:
         """停止监控"""
         self._stop_flag.set()
         self.stop_audio()
+        self.stop_environment()
         if self._thread:
             self._thread.join(timeout=5)
         self.status.is_running = False
@@ -264,6 +304,97 @@ class FallRiskMonitor:
         with self.status._audio_lock:
             self.status._pending_audio_events.clear()
 
+    def _start_environment_thread(self) -> bool:
+        self._ensure_environment_runtime()
+        if self._environment_thread and self._environment_thread.is_alive():
+            return False
+        self._environment_stop_flag.clear()
+        self._environment_last_submit = 0.0
+        self.environment_analyzer = EnvironmentRiskAnalyzer(self.config)
+        self.status.environment_enabled = True
+        self.status.environment_status = "STARTING"
+        self.status.environment_error = None
+        self._environment_thread = threading.Thread(
+            target=self._run_environment,
+            daemon=True,
+        )
+        self._environment_thread.start()
+        return True
+
+    def stop_environment(self) -> None:
+        self._ensure_environment_runtime()
+        self._environment_stop_flag.set()
+        if (
+            self._environment_thread
+            and self._environment_thread is not threading.current_thread()
+        ):
+            self._environment_thread.join(timeout=3)
+        self._environment_thread = None
+        if self.environment_analyzer is not None:
+            self.environment_analyzer.close()
+        self.environment_analyzer = None
+        while True:
+            try:
+                self._environment_queue.get_nowait()
+            except Empty:
+                break
+        self.status.environment_enabled = False
+        if self.status.environment_status != "UNAVAILABLE":
+            self.status.environment_status = "DISABLED"
+            self.status.environment_error = None
+
+    def _submit_environment_frame(self, frame: Any, source_timestamp: float) -> None:
+        self._ensure_environment_runtime()
+        if not self.status.environment_enabled:
+            return
+        interval = float(
+            self.config.get("environment", {}).get("analysis_interval_ms", 1000)
+        ) / 1000.0
+        now = time.monotonic()
+        if now - self._environment_last_submit < interval:
+            return
+        self._environment_last_submit = now
+        item = (frame.copy(), source_timestamp)
+        try:
+            self._environment_queue.put_nowait(item)
+        except Full:
+            try:
+                self._environment_queue.get_nowait()
+            except Empty:
+                pass
+            self._environment_queue.put_nowait(item)
+
+    def _run_environment(self) -> None:
+        try:
+            while not self._environment_stop_flag.is_set():
+                try:
+                    frame, source_timestamp = self._environment_queue.get(timeout=0.2)
+                except Empty:
+                    continue
+                analyzer = self.environment_analyzer
+                if analyzer is None:
+                    break
+                result = analyzer.analyze(frame, source_timestamp, time.time())
+                with self.status._environment_lock:
+                    self.status.last_environment_result = result
+                self.status.environment_status = "RUNNING"
+                self.status.environment_error = None
+        except Exception as exc:
+            log.error(f"环境分析不可用: {exc}")
+            self.status.environment_enabled = False
+            self.status.environment_status = "UNAVAILABLE"
+            self.status.environment_error = str(exc)
+
+    def _current_environment_result(self, now: float) -> EnvironmentAnalysisResult | None:
+        with self.status._environment_lock:
+            result = self.status.last_environment_result
+        if result is None:
+            return None
+        max_age = float(
+            self.config.get("environment", {}).get("result_max_age_seconds", 3)
+        )
+        return result if 0 <= now - result.timestamp <= max_age else None
+
     def _run(self):
         """监控主循环(在子线程运行)"""
         inference_interval = self.config.inference.inference_interval_ms / 1000
@@ -285,6 +416,11 @@ class FallRiskMonitor:
                 for video_frame in cap.frames():
                     if self._stop_flag.is_set():
                         break
+
+                    self._submit_environment_frame(
+                        video_frame.frame,
+                        video_frame.timestamp,
+                    )
 
                     if self.pose_backend != "yolo_pose":
                         detection = self.human_detector.detect_best(video_frame.frame)
@@ -357,18 +493,28 @@ class FallRiskMonitor:
                             ]
                             self.status._pending_audio_events.clear()
 
+                        environment_result = self._current_environment_result(now_timestamp)
                         if baseline.is_ready:
                             deviation = self.deviation_detector.check(feature, baseline)
                             self.status.last_deviation = deviation
+                        else:
+                            deviation = DeviationResult(detail="个体化基线采集中")
 
-                            alert = self.alert_engine.evaluate(
-                                deviation, now_timestamp,
-                                has_activity=True,
-                                audio_events=pending_events or None,
-                            )
-                            self.status.last_alert = alert
-                            self.status.current_risk_level = alert.level
+                        alert = self.alert_engine.evaluate(
+                            deviation,
+                            now_timestamp,
+                            has_activity=True,
+                            audio_events=pending_events or None,
+                            environment_result=environment_result,
+                        )
+                        self.status.last_alert = alert
+                        self.status.current_risk_level = alert.level
 
+                        should_persist = baseline.is_ready or (
+                            environment_result is not None
+                            and environment_result.overall_state in {"MEDIUM", "HIGH"}
+                        )
+                        if should_persist:
                             try:
                                 db = Database()
                                 db.insert_risk_record(
@@ -382,8 +528,16 @@ class FallRiskMonitor:
                                         "trunk_stability": feature.trunk_stability,
                                         "activity_density": feature.activity_density,
                                     },
+                                    env_features=(
+                                        environment_result.to_dict()
+                                        if environment_result is not None
+                                        else None
+                                    ),
                                 )
-                                if alert.level != RiskLevel.LOW:
+                                if (
+                                    alert.level != RiskLevel.LOW
+                                    and not alert.notification_suppressed
+                                ):
                                     db.insert_alert_event(
                                         alert_level=alert.level.value,
                                         message=alert.message,
@@ -400,6 +554,7 @@ class FallRiskMonitor:
         finally:
             self.status.is_running = False
             self.video_capture = None
+            self.stop_environment()
 
     def _run_audio(self):
         """音频采集+分析循环(独立线程, 与视频并行)"""
@@ -517,9 +672,13 @@ class FallRiskMonitor:
 
     def get_status(self) -> dict:
         """获取监控状态"""
+        environment_evaluable = (
+            self.status.last_environment_result is not None
+            and self.status.last_environment_result.overall_state in {"MEDIUM", "HIGH"}
+        )
         risk_label = (
             self.status.current_risk_level.label
-            if self.status.baseline_ready
+            if self.status.baseline_ready or environment_evaluable
             else "基线采集中"
         )
         return {
@@ -531,7 +690,7 @@ class FallRiskMonitor:
             "frames_valid": self.status.frames_valid,
             "current_risk_level": self.status.current_risk_level.value,
             "current_risk_label": risk_label,
-            "risk_evaluable": self.status.baseline_ready,
+            "risk_evaluable": self.status.baseline_ready or environment_evaluable,
             "baseline_ready": self.status.baseline_ready,
             "baseline_samples": self.status.baseline_samples,
             "last_feature": (
@@ -562,6 +721,14 @@ class FallRiskMonitor:
             "audio_source": self.status.audio_source,
             "audio_chunks_processed": self.status.audio_chunks_processed,
             "audio_error": self.status.audio_error,
+            "environment_enabled": self.status.environment_enabled,
+            "environment_status": self.status.environment_status,
+            "environment_error": self.status.environment_error,
+            "last_environment_result": (
+                self.status.last_environment_result.to_dict()
+                if self.status.last_environment_result
+                else None
+            ),
             "last_audio_result": (
                 {
                     "events": [

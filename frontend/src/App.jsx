@@ -35,6 +35,10 @@ export default function App() {
     last_alert: null,
     frames_processed: 0,
     frames_valid: 0,
+    environment_enabled: false,
+    environment_status: 'DISABLED',
+    environment_error: null,
+    last_environment_result: null,
   })
   const [alerts, setAlerts] = useState([])
   const [riskHistory, setRiskHistory] = useState([])
@@ -247,7 +251,8 @@ export default function App() {
     const labelColor = cssVar('--fr-chart-text', '#64748b')
     const tickColor = cssVar('--fr-chart-text', '#94a3b8')
     const primary = cssVar('--fr-chart-primary', '#1d4ed8')
-    const score = status.last_feature ? 50 : 0
+    const latestRiskScore = riskHistory[0]?.risk_score ?? status.last_deviation?.mahalanobis_distance ?? 0
+    const score = Math.min(100, Math.max(0, Number(latestRiskScore) || 0))
     chart.setOption({
       series: [{
         type: 'gauge',
@@ -283,7 +288,7 @@ export default function App() {
       }],
     })
     return () => chart.dispose()
-  }, [status, theme])
+  }, [status, riskHistory, theme])
 
   // ── 趋势图 ──
   useEffect(() => {
@@ -467,6 +472,13 @@ export default function App() {
   }
 
   const level = status.current_risk_level || 'low'
+  const environmentResult = status.last_environment_result
+  const environmentStatusLabel = {
+    DISABLED: '已关闭',
+    STARTING: '启动中',
+    RUNNING: '运行中',
+    UNAVAILABLE: '不可用',
+  }[status.environment_status] || status.environment_status || '未知'
   const levelLabel = LEVEL_LABELS[level] || '低风险'
 
   // 视频徽标状态
@@ -713,10 +725,37 @@ export default function App() {
             <div className="meta-value mono">{status.audio_enabled ? (status.audio_chunks_processed || 0) : '—'}</div>
             <div className="meta-label">音频块数</div>
           </div>
+          <div className="meta-item">
+            <div className="meta-value mono">
+              {environmentResult?.environment_risk_score == null
+                ? '—'
+                : Number(environmentResult.environment_risk_score).toFixed(2)}
+            </div>
+            <div className="meta-label">环境启发分</div>
+          </div>
+        </div>
+        <div className="environment-context" aria-label="环境风险状态">
+          <div className="environment-context-head">
+            <span className={`status-dot ${status.environment_status === 'RUNNING' ? 'online' : 'offline'}`} />
+            <strong>环境感知</strong>
+            <span>{environmentStatusLabel}</span>
+            {environmentResult && <span className="mono">融合 {environmentResult.overall_state}</span>}
+          </div>
+          <div className="environment-context-detail">
+            {environmentResult?.top_hazards?.length
+              ? `邻近危险物：${environmentResult.top_hazards.map(item => item.class).join('、')}`
+              : '当前未识别到邻近危险物'}
+          </div>
+          <div className="environment-context-note">环境与运动分数为工程启发值，不代表跌倒概率</div>
         </div>
         {status.audio_error && (
           <div className="error-banner audio-error-banner" role="alert">
             <AlertTriangle size={14} /> 音频异常: {status.audio_error}
+          </div>
+        )}
+        {status.environment_error && (
+          <div className="error-banner environment-error-banner" role="alert">
+            <AlertTriangle size={14} /> 环境分析降级: {status.environment_error}
           </div>
         )}
       </section>

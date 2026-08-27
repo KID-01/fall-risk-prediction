@@ -534,7 +534,7 @@ svg { display: inline-block; vertical-align: middle; }
 .risk-message { font-size: 15px; color: var(--fr-foreground); }
 .risk-meta {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-top: 18px;
 }
@@ -542,6 +542,25 @@ svg { display: inline-block; vertical-align: middle; }
 .meta-value { font-size: 20px; font-weight: 700; color: var(--fr-foreground); }
 .meta-label { font-size: 12px; color: var(--fr-muted-foreground); }
 .audio-error-banner { margin-top: 14px; }
+.environment-error-banner { margin-top: 10px; }
+.environment-context {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 5px 18px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--fr-border);
+  font-size: 13px;
+}
+.environment-context-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.environment-context-head strong { font-size: 13px; }
+.environment-context-head > span:not(.status-dot) { color: var(--fr-muted-foreground); }
+.environment-context-detail { color: var(--fr-foreground); min-width: 0; overflow-wrap: anywhere; }
+.environment-context-note {
+  grid-column: 1 / -1;
+  color: var(--fr-muted-foreground);
+  font-size: 12px;
+}
 
 /* 四级风险着色 */
 .risk-hero.risk-low { border-left-color: var(--fr-risk-low); background: linear-gradient(135deg, var(--fr-risk-low-soft) 0%, var(--fr-card) 55%); }
@@ -955,6 +974,8 @@ svg { display: inline-block; vertical-align: middle; }
   .form-grid { grid-template-columns: 1fr 1fr; }
   .chart-grid { grid-template-columns: 1fr; }
   .risk-meta { grid-template-columns: repeat(2, 1fr); }
+  .environment-context { grid-template-columns: 1fr; }
+  .environment-context-note { grid-column: auto; }
 }
 
 @media (max-width: 640px) {
