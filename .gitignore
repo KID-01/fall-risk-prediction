@@ -90,6 +90,9 @@ npm-debug.log*
 .ruff_cache/
 /data
 
+# Local training handoff assets and model-owner workspace
+/wwh/
+
 # Reproducible integration-test artifacts. Keep all other weights/data ignored.
 !/checkpoints/
 /checkpoints/*

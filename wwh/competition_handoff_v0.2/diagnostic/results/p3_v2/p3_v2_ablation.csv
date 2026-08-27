@@ -1,4 +1,0 @@
-﻿mode,fall_recall,fall_hit,adl_FC,adl_hit,median_delay_s,fall_FN,adl_FP
-A_terminal_only,0.6667,20,0.9091,10,0.45,"['fall-13', 'fall-14', 'fall-18', 'fall-19', 'fall-24', 'fall-25', 'fall-26', 'fall-27', 'fall-28', 'fall-30']","['adl-11', 'adl-21', 'adl-22', 'adl-30', 'adl-31', 'adl-32', 'adl-33', 'adl-34', 'adl-35', 'adl-39']"
-B_descent_only,0.9333,28,0.9091,10,0.067,"['fall-13', 'fall-30']","['adl-10', 'adl-11', 'adl-21', 'adl-22', 'adl-30', 'adl-31', 'adl-32', 'adl-33', 'adl-34', 'adl-35']"
-C_combined,0.6333,19,0.4545,5,0.467,"['fall-13', 'fall-14', 'fall-18', 'fall-19', 'fall-21', 'fall-24', 'fall-25', 'fall-26', 'fall-27', 'fall-28', 'fall-30']","['adl-21', 'adl-30', 'adl-32', 'adl-33', 'adl-35']"
