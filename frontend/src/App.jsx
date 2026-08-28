@@ -496,6 +496,15 @@ export default function App() {
         </div>
       </header>
 
+      {/* ── 页面导语（浮于整页固定背景之上） ── */}
+      <section className="page-hero" aria-label="页面导语">
+        <div className="page-hero-content">
+          <span className="page-hero-label">多模态 AI 实时监测</span>
+          <h1 className="page-hero-title">跌倒风险实时看板</h1>
+          <p className="page-hero-sub">视频、音频与环境三模态融合分析，持续守护被监测人的每一次日常活动。</p>
+        </div>
+      </section>
+
       {/* ── 监控控制区 ── */}
       <section className="card controls-card" aria-label="监控控制">
         <div className="card-head">

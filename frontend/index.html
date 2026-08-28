@@ -4,18 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>跌倒风险预测系统</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2320808D'/%3E%3Cpath d='M32 13l15 5.6v10.8c0 10.2-6.2 16.6-15 20.6-8.8-4-15-10.4-15-20.6V18.6z' fill='none' stroke='white' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
-      background: #eef2f7; /* --fr-background 预载值，避免白闪 */
-      color: #0f172a;      /* --fr-foreground */
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+      background: #FAF8F5; /* --fr-background 预载值，避免白闪 */
+      color: #1A1918;      /* --fr-foreground */
       font-size: 16px;     /* 适老化: 大字体 */
-      transition: background-color 0.2s ease, color 0.2s ease;
+      transition: background-color 0.22s ease, color 0.22s ease;
     }
     html[data-theme="dark"] body {
-      background: #0b1220;
-      color: #e7edf7;
+      background: #141312;
+      color: #F5F3ED;
     }
     #root { min-height: 100vh; }
   </style>
