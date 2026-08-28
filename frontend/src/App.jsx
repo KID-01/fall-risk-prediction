@@ -24,6 +24,14 @@ function hexToRgba(hex, alpha) {
   return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${alpha})`
 }
 
+// The API currently persists Mahalanobis distance as risk_score. Map its
+// detector thresholds (3 = attention, 6 = severe) onto the dashboard's 0-100 scale.
+function toDisplayRiskScore(value) {
+  const distance = Number(value)
+  if (!Number.isFinite(distance)) return 0
+  return Math.min(100, Math.max(0, (distance / 6) * 100))
+}
+
 export default function App() {
   const [status, setStatus] = useState({
     is_running: false,
@@ -247,7 +255,12 @@ export default function App() {
     const labelColor = cssVar('--fr-chart-text', '#64748b')
     const tickColor = cssVar('--fr-chart-text', '#94a3b8')
     const primary = cssVar('--fr-chart-primary', '#1d4ed8')
-    const score = status.last_feature ? 50 : 0
+    const latestHistoryScore = riskHistory.length > 0
+      ? toDisplayRiskScore(riskHistory[0].risk_score)
+      : 0
+    const score = status.last_deviation
+      ? toDisplayRiskScore(status.last_deviation.mahalanobis_distance)
+      : latestHistoryScore
     chart.setOption({
       series: [{
         type: 'gauge',
@@ -273,7 +286,7 @@ export default function App() {
         title: { offsetCenter: [0, '78%'], fontSize: 14, color: labelColor },
         detail: {
           valueAnimation: true,
-          formatter: '{value}',
+          formatter: value => Number(value).toFixed(1),
           fontSize: 36,
           fontWeight: 700,
           color: textColor,
@@ -283,7 +296,7 @@ export default function App() {
       }],
     })
     return () => chart.dispose()
-  }, [status, theme])
+  }, [status, riskHistory, theme])
 
   // ── 趋势图 ──
   useEffect(() => {
@@ -301,7 +314,13 @@ export default function App() {
     const tooltipBorder = cssVar('--fr-border', '#e2e8f0')
     const primary = cssVar('--fr-chart-primary', '#1d4ed8')
     const times = riskHistory.map(r => new Date(r.timestamp * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })).reverse()
-    const scores = riskHistory.map(r => r.risk_score || 0).reverse()
+    const scores = riskHistory.map(r => toDisplayRiskScore(r.risk_score)).reverse()
+    const dataMin = Math.min(...scores)
+    const dataMax = Math.max(...scores)
+    const dataSpan = Math.max(dataMax - dataMin, 10)
+    const padding = Math.max(dataSpan * 0.2, 5)
+    const yMin = Math.max(0, Math.floor((dataMin - padding) / 5) * 5)
+    const yMax = Math.min(100, Math.ceil((dataMax + padding) / 5) * 5)
     chart.setOption({
       tooltip: {
         trigger: 'axis',
@@ -318,7 +337,7 @@ export default function App() {
         axisTick: { show: false },
       },
       yAxis: {
-        type: 'value', min: 0, max: 100,
+        type: 'value', min: yMin, max: yMax,
         splitLine: { lineStyle: { color: splitColor } },
         axisLabel: { fontSize: 11, color: mutedColor },
       },
@@ -332,6 +351,15 @@ export default function App() {
             { offset: 0, color: hexToRgba(primary, 0.15) },
             { offset: 1, color: hexToRgba(primary, 0.01) },
           ]),
+        },
+        markLine: {
+          silent: true,
+          symbol: 'none',
+          label: { show: false },
+          lineStyle: { type: 'dashed', width: 1, color: mutedColor, opacity: 0.65 },
+          data: [30, 50, 75]
+            .filter(value => value >= yMin && value <= yMax)
+            .map(value => ({ yAxis: value })),
         },
       }],
     })
