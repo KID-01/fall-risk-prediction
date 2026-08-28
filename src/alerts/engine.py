@@ -116,6 +116,7 @@ class AlertEngine:
         timestamp: float,
         has_activity: bool = True,
         audio_events: list[AudioEvent] | None = None,
+        emit: bool = True,
     ) -> AlertEvent:
         """
         评估风险等级并生成预警事件
@@ -194,15 +195,19 @@ class AlertEngine:
             deviation=deviation,
         )
 
-        # 执行响应动作(关注级及以上)
-        if level.priority > 0:
-            for action in self._actions[level]:
+        if emit:
+            self.emit_event(event)
+        return event
+
+    def emit_event(self, event: AlertEvent) -> AlertEvent:
+        """执行通知并写入内存事件日志。"""
+        if event.level.priority > 0:
+            for action in self._actions[event.level]:
                 try:
                     action(event)
                     event.notified = True
                 except Exception as e:
                     event.message += f" [通知失败: {e}]"
-
         with self._event_log_lock:
             self._event_log.append(event)
         return event

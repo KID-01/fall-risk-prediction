@@ -96,7 +96,38 @@ class Database:
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_audio_timestamp ON audio_events(timestamp)
             """)
+            self._ensure_columns(
+                conn,
+                "risk_records",
+                {
+                    "risk_score_source": "TEXT DEFAULT 'mahalanobis_v0'",
+                    "raw_deviation_score": "REAL",
+                    "human_risk_score": "REAL",
+                    "environment_risk_score": "REAL",
+                    "interaction_risk_score": "REAL",
+                    "reason_codes_json": "TEXT",
+                },
+            )
+            self._ensure_columns(
+                conn,
+                "alert_events",
+                {
+                    "risk_score_source": "TEXT DEFAULT 'mahalanobis_v0'",
+                    "reason_codes_json": "TEXT",
+                },
+            )
         log.info(f"数据库初始化完成: {self.db_path}")
+
+    @staticmethod
+    def _ensure_columns(
+        conn: sqlite3.Connection,
+        table: str,
+        columns: dict[str, str],
+    ) -> None:
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, declaration in columns.items():
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
 
     # ── 风险记录 ──
 
@@ -108,18 +139,32 @@ class Database:
         device_id: str = "default",
         gait_features: dict | None = None,
         env_features: dict | None = None,
+        risk_score_source: str = "mahalanobis_v0",
+        raw_deviation_score: float | None = None,
+        human_risk_score: float | None = None,
+        environment_risk_score: float | None = None,
+        interaction_risk_score: float | None = None,
+        reason_codes: list[str] | None = None,
     ) -> int:
         """插入一条风险记录"""
         with self._get_conn() as conn:
             cursor = conn.execute(
                 """INSERT INTO risk_records
                    (timestamp, device_id, person_id, risk_score, risk_level,
-                    gait_features_json, env_features_json)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    gait_features_json, env_features_json, risk_score_source,
+                    raw_deviation_score, human_risk_score, environment_risk_score,
+                    interaction_risk_score, reason_codes_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     time.time(), device_id, person_id, risk_score, risk_level,
                     json.dumps(gait_features, ensure_ascii=False) if gait_features else None,
                     json.dumps(env_features, ensure_ascii=False) if env_features else None,
+                    risk_score_source,
+                    raw_deviation_score,
+                    human_risk_score,
+                    environment_risk_score,
+                    interaction_risk_score,
+                    json.dumps(reason_codes or [], ensure_ascii=False),
                 ),
             )
             return cursor.lastrowid
@@ -151,7 +196,25 @@ class Database:
 
         with self._get_conn() as conn:
             rows = conn.execute(query, params).fetchall()
-        return [dict(r) for r in rows]
+        return [self._normalize_risk_record(dict(row)) for row in rows]
+
+    @staticmethod
+    def _normalize_risk_record(record: dict) -> dict:
+        raw_score = record.get("risk_score")
+        source = record.get("risk_score_source") or "mahalanobis_v0"
+        if raw_score is None:
+            display_score = 0.0
+        elif source == "mahalanobis_v0":
+            display_score = min(100.0, max(0.0, float(raw_score) / 6.0 * 100.0))
+        else:
+            display_score = min(100.0, max(0.0, float(raw_score)))
+        record["raw_risk_score"] = raw_score
+        record["risk_score"] = round(display_score, 2)
+        try:
+            record["reason_codes"] = json.loads(record.get("reason_codes_json") or "[]")
+        except json.JSONDecodeError:
+            record["reason_codes"] = []
+        return record
 
     # ── 告警事件 ──
 
@@ -163,17 +226,20 @@ class Database:
         person_id: str = "default",
         device_id: str = "default",
         video_clip_path: str | None = None,
+        risk_score_source: str = "mahalanobis_v0",
+        reason_codes: list[str] | None = None,
     ) -> int:
         """插入一条告警事件"""
         with self._get_conn() as conn:
             cursor = conn.execute(
                 """INSERT INTO alert_events
                    (timestamp, device_id, person_id, alert_level, risk_score,
-                    message, video_clip_path)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    message, video_clip_path, risk_score_source, reason_codes_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     time.time(), device_id, person_id, alert_level, risk_score,
-                    message, video_clip_path,
+                    message, video_clip_path, risk_score_source,
+                    json.dumps(reason_codes or [], ensure_ascii=False),
                 ),
             )
             return cursor.lastrowid
@@ -213,7 +279,31 @@ class Database:
 
         with self._get_conn() as conn:
             rows = conn.execute(query, params).fetchall()
-        return [dict(r) for r in rows]
+        return [self._normalize_alert_record(dict(row)) for row in rows]
+
+    @staticmethod
+    def _normalize_alert_record(record: dict) -> dict:
+        raw_score = record.get("risk_score")
+        source = record.get("risk_score_source") or "mahalanobis_v0"
+        if raw_score is not None:
+            record["raw_risk_score"] = raw_score
+            record["risk_score"] = round(
+                min(
+                    100.0,
+                    max(
+                        0.0,
+                        float(raw_score) / 6.0 * 100.0
+                        if source == "mahalanobis_v0"
+                        else float(raw_score),
+                    ),
+                ),
+                2,
+            )
+        try:
+            record["reason_codes"] = json.loads(record.get("reason_codes_json") or "[]")
+        except json.JSONDecodeError:
+            record["reason_codes"] = []
+        return record
 
     def acknowledge_alert(self, alert_id: int) -> bool:
         """确认告警"""
@@ -298,14 +388,20 @@ class Database:
                    WHERE timestamp >= ? GROUP BY alert_level""",
                 (cutoff,),
             ).fetchall()
-            avg_risk = conn.execute(
-                "SELECT AVG(risk_score) FROM risk_records WHERE timestamp >= ?", (cutoff,)
-            ).fetchone()[0]
+            risk_rows = conn.execute(
+                "SELECT risk_score, risk_score_source FROM risk_records WHERE timestamp >= ?",
+                (cutoff,),
+            ).fetchall()
+
+        normalized_scores = [
+            self._normalize_risk_record(dict(row))["risk_score"] for row in risk_rows
+        ]
+        avg_risk = sum(normalized_scores) / len(normalized_scores) if normalized_scores else 0
 
         return {
             "hours": hours,
             "total_risk_records": total_risk,
             "total_alerts": total_alerts,
             "alerts_by_level": {r["alert_level"]: r["count"] for r in alerts_by_level},
-            "avg_risk_score": round(avg_risk, 2) if avg_risk else 0,
+            "avg_risk_score": round(avg_risk, 2),
         }

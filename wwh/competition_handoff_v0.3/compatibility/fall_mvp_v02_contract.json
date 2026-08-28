@@ -1,0 +1,81 @@
+{
+  "version": "fall_mvp_v0.2_contract_snapshot",
+  "purpose": "Compatibility guard for optional v0.3 risk extensions",
+  "source_artifact": "artifacts/fall/mvp_final",
+  "required_frame_top_level_keys": [
+    "environment",
+    "fusion",
+    "motion",
+    "person",
+    "quality",
+    "timestamp"
+  ],
+  "required_frame_nested_keys": {
+    "person": [
+      "match",
+      "present"
+    ],
+    "motion": [
+      "score",
+      "source",
+      "state"
+    ],
+    "environment": [
+      "score",
+      "source",
+      "state",
+      "top_hazards"
+    ],
+    "fusion": [
+      "context_elevated",
+      "overall_state",
+      "raw_state",
+      "reason",
+      "source"
+    ],
+    "quality": [
+      "status",
+      "sync_delta_sec"
+    ]
+  },
+  "required_summary_keys": [
+    "frames",
+    "high_frames",
+    "low_frames",
+    "max_environment_risk",
+    "medium_frames",
+    "top_detected_hazards",
+    "unknown_frames",
+    "valid_person_frames"
+  ],
+  "required_config_top_level_keys": [
+    "environment_risk",
+    "fusion",
+    "visual",
+    "yolo"
+  ],
+  "representative_summary": {
+    "frames": 160,
+    "valid_person_frames": 150,
+    "low_frames": 111,
+    "medium_frames": 4,
+    "high_frames": 0,
+    "unknown_frames": 45,
+    "max_environment_risk": 0.9348,
+    "top_detected_hazards": {
+      "chair": 282,
+      "couch": 9
+    }
+  },
+  "source_sha256": {
+    "frames_jsonl": "1ea0257ce5effce3d6281bfdef909a712e81e7c091129f8b70311a26c7f540e7",
+    "summary_json": "b53e4f9b6acf196e6a9ba76c068b9f918afde9778607add7a9f656c947310cbe",
+    "config_snapshot_yaml": "e5368510603e9b03271e84f2b8cca91fdd3d624386d43bdb9b05f09a084d893c"
+  },
+  "compatibility_rules": [
+    "Existing frame fields must not be removed or renamed",
+    "Existing summary fields must not be removed or redefined",
+    "risk_extensions is optional and disabled by default",
+    "v0.2 fusion.overall_state semantics remain unchanged"
+  ]
+}

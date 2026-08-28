@@ -1,0 +1,24 @@
+{
+  "frames": 8,
+  "valid_person_frames": 8,
+  "low_frames": 8,
+  "medium_frames": 0,
+  "high_frames": 0,
+  "unknown_frames": 0,
+  "max_environment_risk": 0.5375,
+  "top_detected_hazards": {
+    "chair": 16
+  },
+  "risk_extensions_summary": {
+    "max_human_risk_index": 1.8,
+    "max_environment_risk_index": 53.75,
+    "max_interaction_risk_index": 87.4,
+    "engineering_state_frames": {
+      "LOW": 0,
+      "MEDIUM": 7,
+      "HIGH": 1,
+      "UNKNOWN": 0
+    },
+    "wet_floor_source": "wet_floor_unavailable"
+  }
+}

@@ -41,11 +41,78 @@ human_detection:
 pose_estimation:
   backend: "yolo_pose"                   # 关键点提取后端: mediapipe | yolo_pose
   model_type: "yolo26n-pose"              # YOLO26n-Pose COCO-Pose pretrained model
+  model_confidence_threshold: 0.25        # YOLO Pose 人体候选阈值
+  keypoint_visibility_threshold: 0.5      # 关键点质量与绘制阈值
+  image_size: 640
   model_complexity: 0                    # 0=Lite, 1=Full, 2=Heavy
   num_keypoints: 33
   confidence_threshold: 0.5              # visibility > 0.5 才保留
   min_visible_lower_keypoints: 4         # 下肢6个关键点至少可见4个
   smoothing: true                        # 关键点平滑
+
+# ── 环境目标检测 ──
+environment_detection:
+  model: "yolo26n"
+  confidence_threshold: 0.25
+  image_size: 640
+  interval_frames: 3                     # 均衡模式: 每3个处理帧更新一次
+  cache_ttl_seconds: 1.0
+
+# ── 人物邻近环境风险 (工程指标, 非概率) ──
+environment_risk:
+  object_risk_table:
+    chair: 0.6
+    couch: 0.4
+    bed: 0.3
+    dining table: 0.5
+    backpack: 0.5
+    suitcase: 0.7
+    sports ball: 0.7
+    laptop: 0.3
+  neutral_classes: ["tv", "remote", "dog"]
+  object_conf_min: 0.25
+  near_thr: 0.4
+  far_thr: 1.5
+  foot_band_gate: true
+  risk_clip: 1.0
+  top_k_hazards: 3
+
+# ── v0.3 视觉风险扩展 ──
+risk_extensions:
+  enabled: true
+  lighting:
+    dark_pixel: 45
+    mean_dark: 70.0
+    contrast_low: 25.0
+    dark_ratio_high: 0.55
+  clutter:
+    obstacle_classes: ["chair", "dining table", "backpack", "suitcase", "sports ball"]
+    corridor_width_ratio: 0.65
+    corridor_length_ratio: 1.25
+    count_high: 3
+    top_k: 3
+  trajectory:
+    history_points: 12
+    min_points: 4
+    horizon_s: 1.0
+    steps: 6
+    moving_speed_px_s: 8.0
+    speed_scale_px_s: 100.0
+  interaction:
+    obstacle_classes: ["chair", "dining table", "backpack", "suitcase", "sports ball"]
+    corridor_radius_px: 24.0
+  wet_floor:
+    enabled: false
+    source: "wet_floor_unavailable"
+
+# ── 综合工程风险融合 ──
+engineering_risk:
+  motion_velocity_scale: 5.0
+  deviation_severe_distance: 6.0
+  upgrade_confirmations: 3
+  downgrade_confirmations: 5
+  alert_reminder_seconds: 60
+  persistence_interval_seconds: 1.0
 
 # ── 关键点索引定义 (MediaPipe Pose 33点) ──
 keypoints:

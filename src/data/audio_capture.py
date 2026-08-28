@@ -188,7 +188,8 @@ class AudioCapture:
 
         self._start_time = time.time()
         self._total_read_sec = 0.0
-        self._base_timestamp = time.time()
+        # 音频事件与视频帧都使用监控启动后的相对时间轴。
+        self._base_timestamp = 0.0
 
         try:
             while not self.stop_event.is_set():

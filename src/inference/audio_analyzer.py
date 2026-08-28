@@ -278,7 +278,7 @@ class AudioAnalyzer:
                 VOCAL_DISTRESS_LABELS.get(idx)
                 or IMPACT_LABELS.get(idx)
                 or COMMON_LABELS.get(idx)
-                or f"类别{idx}"
+                or str(idx)
             )
             candidates.append((label, float(score)))
         candidates.sort(key=lambda item: item[1], reverse=True)

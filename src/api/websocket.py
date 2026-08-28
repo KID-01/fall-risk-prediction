@@ -18,10 +18,13 @@ class ConnectionManager:
 
     def __init__(self):
         self.active_connections: list[WebSocket] = []
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+        if self._loop is None:
+            self._loop = asyncio.get_running_loop()
         log.info(f"WebSocket 客户端连接, 当前在线: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
@@ -41,6 +44,12 @@ class ConnectionManager:
                 disconnected.append(ws)
         for ws in disconnected:
             self.disconnect(ws)
+
+    def broadcast_threadsafe(self, message: dict) -> None:
+        """允许监控线程向告警 WebSocket 广播结构化消息。"""
+        if self._loop is None or not self.active_connections:
+            return
+        asyncio.run_coroutine_threadsafe(self.broadcast(message), self._loop)
 
     async def send_personal(self, websocket: WebSocket, message: dict):
         """发送消息给单个客户端"""

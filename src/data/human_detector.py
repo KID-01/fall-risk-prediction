@@ -32,9 +32,61 @@ class DetectionBox:
         return self.y2 - self.y1
 
     @property
+    def area(self) -> float:
+        return max(0.0, self.width) * max(0.0, self.height)
+
+    @property
+    def center(self) -> tuple[float, float]:
+        return ((self.x1 + self.x2) / 2.0, (self.y1 + self.y2) / 2.0)
+
+    @property
     def is_full_body(self) -> bool:
         """判断是否为完整人体(框的高宽比 > 1.2)"""
         return self.width > 0 and self.height / self.width > 1.2
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "x1": float(self.x1),
+            "y1": float(self.y1),
+            "x2": float(self.x2),
+            "y2": float(self.y2),
+            "confidence": float(self.confidence),
+        }
+
+
+def box_iou(a: DetectionBox, b: DetectionBox) -> float:
+    """计算两个检测框的 IoU。"""
+    x1, y1 = max(a.x1, b.x1), max(a.y1, b.y1)
+    x2, y2 = min(a.x2, b.x2), min(a.y2, b.y2)
+    intersection = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+    union = a.area + b.area - intersection
+    return intersection / union if union > 0 else 0.0
+
+
+class PrimaryPersonTracker:
+    """使用上一帧重叠关系稳定选择主人物，不执行身份识别。"""
+
+    def __init__(self, min_iou: float = 0.05):
+        self.min_iou = min_iou
+        self.previous: DetectionBox | None = None
+
+    def reset(self) -> None:
+        self.previous = None
+
+    def select(self, boxes: list[DetectionBox]) -> DetectionBox | None:
+        if not boxes:
+            self.previous = None
+            return None
+
+        candidates = boxes
+        if self.previous is not None:
+            matched = [box for box in boxes if box_iou(self.previous, box) >= self.min_iou]
+            if matched:
+                candidates = matched
+
+        selected = max(candidates, key=lambda box: (box.area, box.confidence))
+        self.previous = selected
+        return selected
 
 
 class HumanDetector:

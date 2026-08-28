@@ -6,6 +6,10 @@ import { Shield, Moon, Sun, RefreshCw, Play, Square, RotateCcw, AlertTriangle, M
 
 const API_BASE = '/api/v1'
 const LEVEL_LABELS = { low: '低风险', attention: '关注级', warning: '预警级', critical: '高危级' }
+const OBJECT_LABELS = {
+  chair: '椅子', couch: '沙发', bed: '床', 'dining table': '餐桌',
+  backpack: '背包', suitcase: '行李箱', 'sports ball': '球', laptop: '笔记本电脑',
+}
 
 async function readError(response) {
   const payload = await response.json().catch(() => ({}))
@@ -24,14 +28,6 @@ function hexToRgba(hex, alpha) {
   return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${alpha})`
 }
 
-// The API currently persists Mahalanobis distance as risk_score. Map its
-// detector thresholds (3 = attention, 6 = severe) onto the dashboard's 0-100 scale.
-function toDisplayRiskScore(value) {
-  const distance = Number(value)
-  if (!Number.isFinite(distance)) return 0
-  return Math.min(100, Math.max(0, (distance / 6) * 100))
-}
-
 export default function App() {
   const [status, setStatus] = useState({
     is_running: false,
@@ -43,6 +39,7 @@ export default function App() {
     last_alert: null,
     frames_processed: 0,
     frames_valid: 0,
+    current_risk_score: 0,
   })
   const [alerts, setAlerts] = useState([])
   const [riskHistory, setRiskHistory] = useState([])
@@ -58,10 +55,27 @@ export default function App() {
   const [devicesLoading, setDevicesLoading] = useState(false)
   const [controlError, setControlError] = useState('')
   const [videoTab, setVideoTab] = useState('analysis')
+  const [environmentPanelPercent, setEnvironmentPanelPercent] = useState(24)
+  const resizingEnvironmentRef = useRef(false)
   const [playerConfig, setPlayerConfig] = useState(null)
   const [rawPlayerLoaded, setRawPlayerLoaded] = useState(false)
   const [playerState, setPlayerState] = useState('idle')
   const [playerError, setPlayerError] = useState('')
+
+  useEffect(() => {
+    const move = (event) => {
+      if (!resizingEnvironmentRef.current) return
+      const wrap = document.querySelector('.video-frame-wrap')
+      if (!wrap) return
+      const rect = wrap.getBoundingClientRect()
+      const rightPercent = ((rect.right - event.clientX) / rect.width) * 100
+      setEnvironmentPanelPercent(Math.min(50, Math.max(20, rightPercent)))
+    }
+    const stop = () => { resizingEnvironmentRef.current = false; document.body.style.cursor = '' }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', stop)
+    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', stop) }
+  }, [])
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('theme')
     return saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
@@ -166,7 +180,8 @@ export default function App() {
     ws.onclose = () => setConnected(false)
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data)
-      if (msg.type === 'alert') { fetchAlerts(); fetchStatus() }
+      if (msg.type === 'alert') { fetchAlerts(); fetchStatus(); fetchRiskHistory() }
+      if (msg.type === 'risk_update') fetchStatus()
     }
 
     return () => ws.close()
@@ -255,12 +270,8 @@ export default function App() {
     const labelColor = cssVar('--fr-chart-text', '#64748b')
     const tickColor = cssVar('--fr-chart-text', '#94a3b8')
     const primary = cssVar('--fr-chart-primary', '#1d4ed8')
-    const latestHistoryScore = riskHistory.length > 0
-      ? toDisplayRiskScore(riskHistory[0].risk_score)
-      : 0
-    const score = status.last_deviation
-      ? toDisplayRiskScore(status.last_deviation.mahalanobis_distance)
-      : latestHistoryScore
+    const latestHistoryScore = Number(riskHistory[0]?.risk_score || 0)
+    const score = Number(status.current_risk_score ?? latestHistoryScore)
     chart.setOption({
       series: [{
         type: 'gauge',
@@ -314,7 +325,7 @@ export default function App() {
     const tooltipBorder = cssVar('--fr-border', '#e2e8f0')
     const primary = cssVar('--fr-chart-primary', '#1d4ed8')
     const times = riskHistory.map(r => new Date(r.timestamp * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })).reverse()
-    const scores = riskHistory.map(r => toDisplayRiskScore(r.risk_score)).reverse()
+    const scores = riskHistory.map(r => Math.min(100, Math.max(0, Number(r.risk_score) || 0))).reverse()
     const dataMin = Math.min(...scores)
     const dataMax = Math.max(...scores)
     const dataSpan = Math.max(dataMax - dataMin, 10)
@@ -496,6 +507,15 @@ export default function App() {
         </div>
       </header>
 
+      {/* 页面导语保持紧凑，确保监控控制与风险状态仍在首屏可见 */}
+      <section className="page-hero" aria-label="页面导语">
+        <div className="page-hero-content">
+          <span className="page-hero-label">多模态 AI 实时监测</span>
+          <h1 className="page-hero-title">跌倒风险实时看板</h1>
+          <p className="page-hero-sub">视频、音频与环境三模态融合分析，持续守护被监测人的每一次日常活动。</p>
+        </div>
+      </section>
+
       {/* ── 监控控制区 ── */}
       <section className="card controls-card" aria-label="监控控制">
         <div className="card-head">
@@ -617,10 +637,50 @@ export default function App() {
             </span>
           </div>
         </div>
-        <div className="video-frame-wrap">
+        <div className="video-frame-wrap" style={videoTab === 'analysis' ? { '--environment-width': `${environmentPanelPercent}%` } : undefined}>
           {videoTab === 'analysis' ? (
             <>
               <img ref={videoImgRef} alt="AI 分析实时画面" className="video-frame" />
+              <div className="environment-resize-handle" role="separator" aria-label="调整环境检测栏宽度" onMouseDown={() => { resizingEnvironmentRef.current = true; document.body.style.cursor = 'col-resize' }} />
+              <aside className="analysis-environment-panel">
+                <div className="environment-model-status">
+                  Pose {status.pose_model_loaded ? '已加载' : '待加载'} · 环境 {status.environment_model_loaded ? '已加载' : '待加载'} · {status.is_running ? '实时监测' : '未启动'}
+                </div>
+                <div className="environment-extension-grid">
+                  <span>环境指数 <b>{status.environment?.risk_index == null ? '--' : status.environment.risk_index.toFixed(1)}</b></span>
+                  <span>照明 <b>{status.low_light?.state || '--'}</b></span>
+                  <span>障碍物 <b>{status.obstacle?.state || '--'}</b></span>
+                  <span>轨迹 <b>{status.trajectory?.state || '--'}</b></span>
+                  <span>交互 <b>{status.interaction?.state || '--'}</b></span>
+                </div>
+                <h3>环境检测</h3>
+                <div>识别目标: {status.environment_count || 0}</div>
+                {status.environment_error && <div className="text-error">模型不可用</div>}
+                {status.environment?.stale && <div className="text-error">环境结果已过期</div>}
+                {!status.environment_error && !(status.environment_boxes || []).length && <div>暂未识别到环境目标</div>}
+                {(status.environment_boxes || []).map((box, index) => (
+                  <div className="environment-item" key={`${box.label}-${index}`}>
+                    <span>{OBJECT_LABELS[box.label] || box.label}</span><strong>{(box.confidence * 100).toFixed(1)}%</strong>
+                  </div>
+                ))}
+                {(status.top_hazards || []).length > 0 && <h3>主要危险物</h3>}
+                {(status.top_hazards || []).map((hazard, index) => (
+                  <div className="environment-hazard" key={`${hazard.label || hazard.class}-${index}`}>
+                    <span>{OBJECT_LABELS[hazard.label || hazard.class] || hazard.label || hazard.class}</span>
+                    <strong>{(hazard.risk_contribution * 100).toFixed(1)}</strong>
+                    <small>距离 {hazard.normalized_distance == null ? '--' : Number(hazard.normalized_distance).toFixed(2)}×身高</small>
+                  </div>
+                ))}
+                <div>光照亮度: {status.illumination == null ? '--' : `${Math.round(status.illumination)}/255`}</div>
+              </aside>
+              {status.is_running && (
+                <div className="video-detection-summary">
+                  <span>人体: {status.human_detected ? `已检测 (${status.person?.candidate_count || 1})` : '未检测'}</span>
+                  <span>环境目标: {status.environment_count || 0}</span>
+                  <span>光照: {status.illumination == null ? '--' : `${Math.round(status.illumination)}/255`}</span>
+                  {status.environment_error && <span className="text-error">环境检测不可用</span>}
+                </div>
+              )}
               {!status.is_running && (
                 <div className="video-placeholder">
                   <MonitorPlay size={30} />
@@ -644,7 +704,13 @@ export default function App() {
                 enabled: status.audio_enabled,
                 source: status.audio_source,
                 chunksProcessed: status.audio_chunks_processed,
-                error: status.audio_error,
+                error: status.audio_error || (
+                  audioSource === 'video_source' && status.is_running && !status.audio_enabled
+                    ? (audioStatus?.checkpoint_exists
+                      ? '视频源音频未启用，请停止监控后重新点击“视频源收音”'
+                      : 'PANNs 音频模型未安装，无法进行音频分析')
+                    : ''
+                ),
                 lastResult: status.last_audio_result,
                 lastAlert: status.last_alert,
               }}
@@ -685,7 +751,7 @@ export default function App() {
             <span className="risk-level-label">{levelLabel}</span>
           </div>
           <div className="risk-message">
-            {status.last_alert ? status.last_alert.message : '系统运行正常，持续监测中'}
+            {status.current_risk_message || status.last_alert?.message || '系统运行正常，持续监测中'}
           </div>
         </div>
         <div className="risk-meta">

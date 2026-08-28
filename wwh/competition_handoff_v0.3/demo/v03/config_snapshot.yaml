@@ -1,0 +1,81 @@
+visual:
+  model: weights/pose/yolo26n-pose.pt
+  conf: 0.25
+  imgsz: 640
+  motion_window_s: 0.3
+  source_tag: motion_heuristic_v0
+yolo:
+  model: yolo26n.pt
+  conf: 0.25
+  imgsz: 640
+  source_tag: yolo_enviro_coco
+environment_risk:
+  object_risk_table:
+    chair: 0.6
+    couch: 0.4
+    bed: 0.3
+    dining table: 0.5
+    backpack: 0.5
+    suitcase: 0.7
+    sports ball: 0.7
+    laptop: 0.3
+  neutral_classes:
+  - tv
+  - remote
+  - dog
+  person_conf_min: 0.25
+  object_conf_min: 0.25
+  distance_scale: person_bbox_height
+  near_thr: 0.4
+  far_thr: 1.5
+  foot_band_gate: true
+  risk_clip: 1.0
+  top_k_hazards: 3
+fusion:
+  mode: rule_table
+  motion_thr:
+  - 0.3
+  - 0.6
+  env_thr:
+  - 0.4
+  - 0.7
+  person_match_min_iou: 0.15
+  person_match_center_ratio: 0.7
+  sync_tol_sec: 0.05
+  persistence_frames: 3
+risk_extensions:
+  enabled: true
+  lighting:
+    dark_pixel: 45
+    mean_dark: 70.0
+    contrast_low: 25.0
+    dark_ratio_high: 0.55
+  clutter:
+    obstacle_classes:
+    - chair
+    - dining table
+    - backpack
+    - suitcase
+    - sports ball
+    corridor_width_ratio: 0.65
+    corridor_length_ratio: 1.25
+    count_high: 3
+    top_k: 3
+  trajectory:
+    history_points: 12
+    min_points: 4
+    horizon_s: 1.0
+    steps: 6
+    moving_speed_px_s: 8.0
+    speed_scale_px_s: 100.0
+  interaction:
+    obstacle_classes:
+    - chair
+    - dining table
+    - backpack
+    - suitcase
+    - sports ball
+    corridor_radius_px: 24.0
+  wet_floor:
+    enabled: false
+    source: wet_floor_unavailable

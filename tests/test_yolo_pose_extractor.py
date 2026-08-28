@@ -180,6 +180,11 @@ class TestYoloPoseExtractor:
         # 下肢/躯干可见数足够, 通过帧质量检查
         assert kp_frame.is_valid is True
 
+        pose_result = extractor.extract_result(_make_video_frame())
+        assert pose_result.primary is not None
+        assert pose_result.primary.quality_state == "OK"
+        assert pose_result.primary.quality_reason == ""
+
     def test_extract_returns_none_when_no_person(self):
         """无人体检测结果时返回 None"""
         extractor = YoloPoseExtractor()

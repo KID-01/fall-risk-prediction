@@ -1,0 +1,12 @@
+{
+  "frames": 8,
+  "valid_person_frames": 8,
+  "low_frames": 8,
+  "medium_frames": 0,
+  "high_frames": 0,
+  "unknown_frames": 0,
+  "max_environment_risk": 0.5375,
+  "top_detected_hazards": {
+    "chair": 16
+  }
+}

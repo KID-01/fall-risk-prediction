@@ -76,8 +76,8 @@ export default function AudioMonitor({
 
     const chart = echarts.init(pipelineChartRef.current)
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-    const textColor = isDark ? '#e2e8f0' : '#1e293b'
-    const mutedColor = isDark ? '#64748b' : '#94a3b8'
+    const textColor = isDark ? '#F5F3ED' : '#1A1918'
+    const mutedColor = isDark ? '#A29E92' : '#8A887E'
 
     const labels = topLabels.slice(0, 10).map(([l]) => l)
     const scores = topLabels.slice(0, 10).map(([, s]) => s)
@@ -90,7 +90,7 @@ export default function AudioMonitor({
       grid: { left: 10, right: 40, top: 10, bottom: 10, containLabel: true },
       xAxis: {
         type: 'value', min: 0, max: 1,
-        splitLine: { lineStyle: { color: isDark ? '#334155' : '#f1f5f9' } },
+        splitLine: { lineStyle: { color: isDark ? '#2E2C28' : '#EFECE3' } },
         axisLabel: { fontSize: 11, color: mutedColor },
       },
       yAxis: {
@@ -103,7 +103,7 @@ export default function AudioMonitor({
         itemStyle: {
           borderRadius: [0, 4, 4, 0],
           color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#6366f1' }, { offset: 1, color: '#818cf8' },
+            { offset: 0, color: '#20808D' }, { offset: 1, color: '#3AA8B5' },
           ]),
         },
         label: {
@@ -159,7 +159,7 @@ export default function AudioMonitor({
     canvas.width = width * dpr; canvas.height = height * dpr
     ctx.scale(dpr, dpr)
     ctx.clearRect(0, 0, width, height)
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--primary') || '#3b82f6'
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--fr-chart-primary') || '#20808D'
     ctx.globalAlpha = 0.6
     const step = Math.max(1, Math.floor(float32Array.length / width))
     for (let x = 0; x < width; x++) {
@@ -482,13 +482,9 @@ export default function AudioMonitor({
                   <div className="events-list">
                     {activeResult.events.map((event, i) => {
                       const catLabel = event.category === 'vocal_distress' ? '人声' : '撞击'
-                      const catColor = event.category === 'vocal_distress' ? 'var(--orange)' : 'var(--red)'
+                      const catClass = event.category === 'vocal_distress' ? 'voice' : 'impact'
                       return (
-                        <span
-                          key={`${event.class_index}-${i}`}
-                          className="event-badge"
-                          style={{ background: `${catColor}20`, color: catColor, borderColor: catColor }}
-                        >
+                        <span key={`${event.class_index}-${i}`} className={`event-badge ${catClass}`}>
                           [{catLabel}] {event.label} ({event.score.toFixed(2)})
                         </span>
                       )
@@ -550,7 +546,7 @@ export default function AudioMonitor({
           className="audio-waveform"
           width={800}
           height={120}
-          style={{ width: '100%', height: '120px', background: 'var(--chart-bg)' }}
+          style={{ width: '100%', height: '120px', background: 'var(--fr-surface)' }}
         />
       </div>
     </div>
