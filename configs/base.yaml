@@ -214,7 +214,7 @@ alert:
 audio:
   enabled: true
   model_type: "Cnn14"                    # panns-inference 固定支持 Cnn14
-  checkpoint_path: "~/panns_data/Cnn14_mAP=0.431.pth"
+  checkpoint_path: "E:/fengxian/panns_data/Cnn14_mAP=0.431.pth"
   device: "cpu"                          # cpu | cuda
   sample_rate: 32000                     # PANNs 固定内部采样率
   chunk_seconds: 10                      # 分析片段长度(秒, 预留给后续流式分帧)
