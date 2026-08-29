@@ -20,6 +20,9 @@ API 路由 (RESTful + WebSocket):
 
   GET  /api/v1/alerts                 告警历史(筛选+分页)
   POST /api/v1/alerts/{id}/acknowledge 确认告警
+  GET  /api/v1/notifications/policy   通知渠道策略
+  GET  /api/v1/notifications          通知历史与投递状态
+  GET  /api/v1/notifications/{id}     通知详情
 
   GET  /api/v1/audio/status           音频分析配置与模型状态
   POST /api/v1/audio/analyze          上传音频进行声音事件识别
@@ -76,6 +79,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         monitor.stop()
+        monitor.notification_service.close()
         cleanup_staged_videos()
         if app.state.ezviz_client is not None:
             await app.state.ezviz_client.close()

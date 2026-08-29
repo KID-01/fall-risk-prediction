@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from src.api.database import Database
 from src.inference.monitor import FallRiskMonitor
+from src.notifications.service import NOTIFICATION_POLICY
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -286,6 +287,47 @@ async def baseline_reset(person_id: str | None = None):
 alerts_router = APIRouter(prefix="/api/v1", tags=["告警"])
 
 
+@alerts_router.get("/notifications/policy")
+async def get_notification_policy():
+    """获取风险等级与通知渠道策略，供客户端初始化。"""
+    return monitor.notification_service.policy()
+
+
+@alerts_router.get("/notifications")
+async def get_notifications(
+    person_id: str | None = None,
+    device_id: str | None = None,
+    risk_level: str | None = None,
+    acknowledged: int | None = None,
+    hours: int = 24,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """查询通知事件及各渠道投递状态。"""
+    if risk_level and risk_level not in NOTIFICATION_POLICY:
+        raise HTTPException(status_code=400, detail="risk_level 仅支持 low/attention/critical")
+    start_time = time.time() - hours * 3600
+    notifications = db.query_notifications(
+        person_id=person_id,
+        device_id=device_id,
+        risk_level=risk_level,
+        acknowledged=acknowledged,
+        start_time=start_time,
+        limit=limit,
+        offset=offset,
+    )
+    return {"total": len(notifications), "notifications": notifications}
+
+
+@alerts_router.get("/notifications/{notification_id}")
+async def get_notification(notification_id: str):
+    """按不透明通知 ID 查询详情。"""
+    notification = db.get_notification(notification_id)
+    if notification is None:
+        raise HTTPException(status_code=404, detail="通知不存在")
+    return notification
+
+
 @alerts_router.get("/alerts")
 async def get_alerts(
     level: str | None = None,
@@ -305,6 +347,12 @@ async def get_alerts(
         limit=limit,
         offset=offset,
     )
+    for alert in alerts:
+        notification = db.get_notification_by_alert_id(alert["id"])
+        if notification:
+            alert["notification"] = notification
+        else:
+            alert["notification"] = None
     return {"total": len(alerts), "alerts": alerts}
 
 
@@ -314,6 +362,7 @@ async def acknowledge_alert(alert_id: int):
     success = db.acknowledge_alert(alert_id)
     if not success:
         raise HTTPException(status_code=404, detail="告警不存在")
+    monitor.notification_service.acknowledge_alert(alert_id)
     return {"code": 200, "message": "告警已确认"}
 
 

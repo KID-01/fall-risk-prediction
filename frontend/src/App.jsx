@@ -39,6 +39,30 @@ function riskScoreClass(state) {
   return `risk-score risk-${String(state || 'unknown').toLowerCase()}`
 }
 
+const RISK_COUNT_LEVELS = ['LOW', 'MEDIUM', 'HIGH']
+const RISK_COUNT_ATTRIBUTES = [
+  { key: 'human', label: '人体' },
+  { key: 'lighting', label: '照明' },
+  { key: 'obstacle', label: '障碍物' },
+  { key: 'trajectory', label: '轨迹' },
+  { key: 'interaction', label: '交互' },
+]
+
+function createRiskOccurrenceStats() {
+  return Object.fromEntries(
+    RISK_COUNT_ATTRIBUTES.map(({ key }) => [
+      key,
+      Object.fromEntries(RISK_COUNT_LEVELS.map(level => [level, 0])),
+    ]),
+  )
+}
+
+function normalizeRiskState(value) {
+  const state = String(value || '').toUpperCase()
+  if (state === 'NORMAL') return 'LOW'
+  return RISK_COUNT_LEVELS.includes(state) ? state : null
+}
+
 export default function App() {
   const [status, setStatus] = useState({
     is_running: false,
@@ -54,6 +78,7 @@ export default function App() {
   })
   const [alerts, setAlerts] = useState([])
   const [riskHistory, setRiskHistory] = useState([])
+  const [riskOccurrenceStats, setRiskOccurrenceStats] = useState(createRiskOccurrenceStats)
   const [stats, setStats] = useState({})
   const [connected, setConnected] = useState(false)
   const [sourceMode, setSourceMode] = useState('ezviz')
@@ -105,8 +130,54 @@ export default function App() {
   const videoAudioRef = useRef(null)
   const gaugeRef = useRef(null)
   const trendRef = useRef(null)
+  const riskOccurrenceRef = useRef({ sessionKey: null, sampleKey: null, wasRunning: false, lastFrame: null })
 
   const selectedDevice = devices.find(device => device.device_id === selectedDeviceId)
+
+  useEffect(() => {
+    const sessionKey = [status.source_type, status.source, status.source_name].filter(Boolean).join(':') || 'default'
+    const frameCount = Number(status.frames_processed)
+    const hasFrameCount = Number.isFinite(frameCount)
+    const sessionChanged = riskOccurrenceRef.current.sessionKey !== sessionKey
+    const restarted = status.is_running && !riskOccurrenceRef.current.wasRunning
+    const frameCounterReset = hasFrameCount
+      && riskOccurrenceRef.current.lastFrame != null
+      && frameCount < riskOccurrenceRef.current.lastFrame
+
+    if (sessionChanged || restarted || frameCounterReset) {
+      riskOccurrenceRef.current = { sessionKey, sampleKey: null, wasRunning: Boolean(status.is_running), lastFrame: hasFrameCount ? frameCount : null }
+      setRiskOccurrenceStats(createRiskOccurrenceStats())
+      if (!status.is_running) return
+    }
+
+    riskOccurrenceRef.current.sessionKey = sessionKey
+    riskOccurrenceRef.current.wasRunning = Boolean(status.is_running)
+    if (hasFrameCount) riskOccurrenceRef.current.lastFrame = frameCount
+    if (!status.is_running) return
+
+    const states = {
+      human: normalizeRiskState(status.risk_extensions?.human_risk_state || status.motion?.state),
+      lighting: normalizeRiskState(status.low_light?.state),
+      obstacle: normalizeRiskState(status.obstacle?.state),
+      trajectory: normalizeRiskState(status.trajectory?.state),
+      interaction: normalizeRiskState(status.interaction?.state),
+    }
+    const sampleKey = hasFrameCount && frameCount > 0
+      ? `${sessionKey}:frame:${frameCount}`
+      : `${sessionKey}:state:${Object.values(states).join(',')}:${status.environment_last_updated || ''}`
+    if (riskOccurrenceRef.current.sampleKey === sampleKey) return
+    riskOccurrenceRef.current.sampleKey = sampleKey
+
+    setRiskOccurrenceStats(previous => {
+      const next = { ...previous }
+      RISK_COUNT_ATTRIBUTES.forEach(({ key }) => {
+        const level = states[key]
+        if (!level) return
+        next[key] = { ...next[key], [level]: next[key][level] + 1 }
+      })
+      return next
+    })
+  }, [status])
 
   const handleVideoImageLoad = useCallback((event) => {
     const { naturalWidth, naturalHeight } = event.currentTarget
@@ -836,6 +907,30 @@ export default function App() {
                 ))}
                 <div>光照亮度: {status.illumination == null ? '--' : `${Math.round(status.illumination)}/255`}</div>
                 {developerVideoName && developerVideoActive && <div className="developer-video-name" title={developerVideoName}>开发者视频：{developerVideoName}</div>}
+                <div className="risk-occurrence-section">
+                  <h3>风险级别统计</h3>
+                  <div className="risk-occurrence-table-wrap">
+                    <table className="risk-occurrence-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">属性</th>
+                          {RISK_COUNT_LEVELS.map(level => <th scope="col" key={level}>{level}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {RISK_COUNT_ATTRIBUTES.map(({ key, label }) => (
+                          <tr key={key}>
+                            <th scope="row">{label}</th>
+                            {RISK_COUNT_LEVELS.map(level => (
+                              <td key={level}>{riskOccurrenceStats[key]?.[level] || 0}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="risk-occurrence-note">按当前监控会话采样累计，UNKNOWN 不计入</div>
+                </div>
               </aside>
               {status.is_running && (
                 <div className="video-detection-summary">

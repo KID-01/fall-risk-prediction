@@ -36,6 +36,7 @@ from src.inference.visual_risk import (
     risk_state,
     unavailable_wet_floor,
 )
+from src.notifications.service import NotificationService
 from src.utils.config import get_config
 from src.utils.draw import draw_overlay, encode_jpeg
 from src.utils.keypoints import KeypointFrame
@@ -60,6 +61,7 @@ class MonitorStatus:
     last_feature: FeatureVector | None = None
     last_deviation: DeviationResult | None = None
     last_alert: AlertEvent | None = None
+    last_notification: dict | None = None
     current_risk_level: RiskLevel = RiskLevel.LOW
     baseline_ready: bool = False
     baseline_samples: int = 0
@@ -136,6 +138,7 @@ class FallRiskMonitor:
         self.baseline_manager = BaselineManager()
         self.deviation_detector = DeviationDetector()
         self.alert_engine = AlertEngine()
+        self.notification_service = NotificationService()
         engineering_config = self.config.engineering_risk
         self.motion_risk_tracker = MotionRiskTracker(
             scale=float(engineering_config.motion_velocity_scale)
@@ -439,7 +442,13 @@ class FallRiskMonitor:
                     self.status.environment_state = environment.get("state", "UNKNOWN")
                     self.status.interaction_risk_score = interaction.get("risk_index")
                     self.status.risk_extensions = {
-                        "source": "risk_extensions_v0_3",
+                        "source": "risk_extensions_v0_3_2",
+                        "human_risk_index": self.status.human_risk_score,
+                        "human_risk_state": risk_state(self.status.human_risk_score),
+                        "environment_risk_index": None,
+                        "environment_risk_state": "UNKNOWN",
+                        "interaction_risk_index": self.status.interaction_risk_score,
+                        "interaction_risk_state": risk_state(self.status.interaction_risk_score),
                         "lighting": lighting,
                         "clutter": clutter,
                         "trajectory": trajectory,
@@ -506,13 +515,20 @@ class FallRiskMonitor:
                             None
                             if environment.get("score") is None
                             else environment["score"] * 100.0,
-                            lighting.get("risk_index"),
                             clutter.get("risk_index"),
                         )
                         if value is not None
                     ]
                     environment_index = max(environment_values) if environment_values else None
                     self.status.human_risk_score = human_index
+                    self.status.risk_extensions["human_risk_index"] = human_index
+                    self.status.risk_extensions["human_risk_state"] = risk_state(human_index)
+                    self.status.risk_extensions["environment_risk_index"] = environment_index
+                    self.status.risk_extensions["environment_risk_state"] = risk_state(environment_index)
+                    self.status.risk_extensions["interaction_risk_index"] = interaction.get("risk_index")
+                    self.status.risk_extensions["interaction_risk_state"] = risk_state(
+                        interaction.get("risk_index")
+                    )
 
                     previous_level = self.status.current_risk_level
                     decision = self.engineering_fusion.evaluate(
@@ -532,6 +548,7 @@ class FallRiskMonitor:
                     self.status.current_risk_score = decision.overall_score
                     self.status.current_risk_level = RiskLevel(decision.overall_level)
                     self.status.current_risk_message = self._risk_message(decision)
+                    self.status.risk_extensions["overall_engineering_state_v0_3"] = decision.overall_level.upper()
                     if self.status.current_risk_level == RiskLevel.LOW:
                         self._last_emitted_alert_level = RiskLevel.LOW
 
@@ -554,7 +571,19 @@ class FallRiskMonitor:
                         )
                         self.alert_engine.emit_event(alert)
                         self.status.last_alert = alert
-                        self._persist_alert(alert, decision, person_id, device_id)
+                        alert_id = self._persist_alert(alert, decision, person_id, device_id)
+                        try:
+                            self.status.last_notification = self.notification_service.dispatch(
+                                alert,
+                                alert_id=alert_id,
+                                risk_score=decision.overall_score,
+                                person_id=person_id,
+                                device_id=device_id,
+                                reason_codes=decision.reason_codes,
+                            )
+                        except Exception as exc:
+                            self.status.last_notification = None
+                            log.error(f"通知编排失败，保留原有告警链路: {exc}")
                         manager.broadcast_threadsafe(
                             {
                                 "type": "alert",
@@ -562,6 +591,11 @@ class FallRiskMonitor:
                                 "score": decision.overall_score,
                                 "message": alert.message,
                                 "reason_codes": decision.reason_codes,
+                                "notification_id": (
+                                    self.status.last_notification.get("notification_id")
+                                    if self.status.last_notification
+                                    else None
+                                ),
                             }
                         )
 
@@ -591,6 +625,17 @@ class FallRiskMonitor:
                                 top_hazards=self.status.top_hazards,
                                 trajectory=trajectory,
                                 risk_score=self.status.current_risk_score,
+                                human_risk_score=self.status.human_risk_score,
+                                environment_risk_score=(
+                                    self.status.fusion.environment_risk_index
+                                    if self.status.fusion
+                                    else None
+                                ),
+                                interaction_risk_score=(
+                                    self.status.fusion.interaction_risk_index
+                                    if self.status.fusion
+                                    else None
+                                ),
                             )
                             video_manager.broadcast_frame(encode_jpeg(overlay))
                         except Exception as exc:
@@ -666,9 +711,9 @@ class FallRiskMonitor:
         decision: FusionDecision,
         person_id: str,
         device_id: str,
-    ) -> None:
+    ) -> int | None:
         try:
-            Database().insert_alert_event(
+            return Database().insert_alert_event(
                 alert_level=alert.level.value,
                 message=alert.message,
                 risk_score=decision.overall_score,
@@ -679,6 +724,7 @@ class FallRiskMonitor:
             )
         except Exception as exc:
             log.error(f"告警持久化失败: {exc}")
+            return None
 
     def _persist_risk_record(
         self,
@@ -828,6 +874,7 @@ class FallRiskMonitor:
                 if self.status.last_alert
                 else None
             ),
+            "last_notification": self.status.last_notification,
             "audio_enabled": self.status.audio_enabled,
             "audio_source": self.status.audio_source,
             "audio_chunks_processed": self.status.audio_chunks_processed,

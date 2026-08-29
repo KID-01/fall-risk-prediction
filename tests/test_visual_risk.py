@@ -101,6 +101,33 @@ class TestRiskExtensions:
         assert interaction["risk_index"] > 0
         assert interaction["intersections"][0]["class"] == "chair"
 
+    def test_interaction_scores_path_overlap_from_v032(self):
+        trajectory = {
+            "available": True,
+            "horizon_s": 1.0,
+            "predicted_points": [[100, 100], [120, 120], [140, 140], [160, 160]],
+        }
+        chair = EnvironmentBox(130, 130, 170, 180, 0.9, "chair")
+        result = compute_interaction_risk(
+            trajectory,
+            [chair],
+            unavailable_wet_floor(),
+            {"obstacle_classes": ["chair"], "corridor_radius_px": 20},
+        )
+        intersection = result["intersections"][0]
+        assert intersection["path_overlap_ratio"] > 0
+        assert result["evidence"]["max_path_overlap_ratio"] == intersection["path_overlap_ratio"]
+
+        # A corridor hit is represented explicitly and contributes to the score.
+        farther = EnvironmentBox(170, 170, 200, 210, 0.9, "chair")
+        overlap_result = compute_interaction_risk(
+            trajectory,
+            [farther],
+            unavailable_wet_floor(),
+            {"obstacle_classes": ["chair"], "corridor_radius_px": 20},
+        )
+        assert overlap_result["intersections"][0]["path_overlap_ratio"] > 0
+
     def test_trajectory_requires_history(self):
         provider = CausalTrajectoryProvider(
             {

@@ -322,6 +322,21 @@ def _point_distance_to_box(point: list[float], box: EnvironmentBox) -> float:
     return math.hypot(dx, dy)
 
 
+def _path_overlap_ratio(
+    points: list[list[float]],
+    box: tuple[float, float, float, float],
+    radius: float,
+) -> float:
+    """预测路径点落入障碍物 corridor 扩展框的比例。"""
+    x1, y1, x2, y2 = box
+    hits = sum(
+        x1 - radius <= point[0] <= x2 + radius
+        and y1 - radius <= point[1] <= y2 + radius
+        for point in points
+    )
+    return hits / len(points) if points else 0.0
+
+
 def compute_interaction_risk(
     trajectory: dict,
     objects: list[EnvironmentBox],
@@ -345,7 +360,10 @@ def compute_interaction_risk(
             continue
         distances = [_point_distance_to_box(point, obj) for point in points]
         minimum = min(distances)
-        if minimum <= radius:
+        overlap = _path_overlap_ratio(
+            points, (obj.x1, obj.y1, obj.x2, obj.y2), radius
+        )
+        if minimum <= radius or overlap > 0:
             step = distances.index(minimum)
             intersections.append(
                 {
@@ -353,6 +371,7 @@ def compute_interaction_risk(
                     "class": obj.label,
                     "confidence": round(obj.confidence, 4),
                     "min_distance_px": round(minimum, 2),
+                    "path_overlap_ratio": round(overlap, 4),
                     "time_to_interaction_s": round(
                         float(trajectory.get("horizon_s", 1.0)) * (step + 1) / len(points),
                         3,
@@ -367,7 +386,8 @@ def compute_interaction_risk(
             virtual = EnvironmentBox(*map(float, values), float(region.get("confidence", 0)), "wet_floor")
             distances = [_point_distance_to_box(point, virtual) for point in points]
             minimum = min(distances)
-            if minimum <= radius:
+            overlap = _path_overlap_ratio(points, tuple(values), radius)
+            if minimum <= radius or overlap > 0:
                 step = distances.index(minimum)
                 intersections.append(
                     {
@@ -375,6 +395,7 @@ def compute_interaction_risk(
                         "class": "wet_floor",
                         "confidence": virtual.confidence,
                         "min_distance_px": round(minimum, 2),
+                        "path_overlap_ratio": round(overlap, 4),
                         "time_to_interaction_s": round(
                             float(trajectory.get("horizon_s", 1.0)) * (step + 1) / len(points),
                             3,
@@ -387,15 +408,20 @@ def compute_interaction_risk(
         )
     nearest_time = min(item["time_to_interaction_s"] for item in intersections)
     confidence = max(item["confidence"] for item in intersections)
+    overlap = max(item["path_overlap_ratio"] for item in intersections)
     urgency = max(
         0.0,
         1.0 - nearest_time / max(float(trajectory.get("horizon_s", 1.0)), 1e-6),
     )
-    index = 100 * min(1.0, 0.6 * urgency + 0.4 * confidence)
+    index = 100 * min(1.0, 0.55 * overlap + 0.25 * urgency + 0.2 * confidence)
     return provider_result(
         "interaction_v0",
         index,
-        evidence={"path_points": len(points), "nearest_time_s": round(nearest_time, 3)},
+        evidence={
+            "path_points": len(points),
+            "nearest_time_s": round(nearest_time, 3),
+            "max_path_overlap_ratio": round(overlap, 4),
+        },
         reasons=["predicted_path_intersects_hazard"],
         intersections=intersections,
     )

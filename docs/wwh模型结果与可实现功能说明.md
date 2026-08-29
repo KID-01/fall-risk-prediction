@@ -177,3 +177,15 @@ Invoke-RestMethod http://127.0.0.1:8000/api/v1/risk/current
 - 单目图像中的目标距离是近似的图像平面距离，不是真实米制距离。
 - 多人跟踪、复杂遮挡和复杂人体-物体交互仍有边界。
 - 当前页面展示的是实时推理输出，不应直接把演示目录中的 JSON 或 `summary.json` 当作在线结果。
+
+## 9. v0.3.2 更新说明
+
+项目实时链路现已接入 `competition_handoff_v0.3.2` 的环境交互优化。该版本仍保持 v0.3 的兼容字段，同时新增以下语义：
+
+- 交互风险同时考虑预测轨迹与障碍物 corridor 的路径重叠比例、最近交互时刻和目标置信度；指数公式为 `100 * (0.55 * overlap + 0.25 * urgency + 0.2 * confidence)`，最终限制在 `0–100`。
+- 每个 `interaction.intersections[]` 项新增 `path_overlap_ratio`；`interaction.evidence` 新增 `max_path_overlap_ratio`，用于说明风险分值中路径重叠的贡献。
+- 环境主风险指数由物体邻近风险和脚部通道障碍风险构成，不再把 Lighting 风险直接混入主环境分；低光结果仍在 `risk_extensions.lighting` 独立返回。
+- 在线状态的 `risk_extensions.source` 为 `risk_extensions_v0_3_2`，并同步提供 `human_risk_index`、`environment_risk_index`、`interaction_risk_index` 及对应状态字段。
+- 视频帧右上角的 HUMAN、ENV、INTERACTION 分项面板与 API 使用同一套 0–100 工程风险指数；`UNKNOWN` 表示数据不可用，不代表低风险。
+
+v0.3.2 仍不提供可靠的 Wet Floor 模型，`wet_floor` 必须保持 `available=false`、`state=UNKNOWN`。所有新增指数都是工程风险指标，不是跌倒概率或临床结论。

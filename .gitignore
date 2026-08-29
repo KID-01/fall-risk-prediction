@@ -15,6 +15,9 @@ venv/
 env/
 .env
 
+wwh/
+
+
 # ── 模型权重 ──
 *.pt
 *.pth

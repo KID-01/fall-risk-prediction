@@ -81,6 +81,62 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_alert_timestamp ON alert_events(timestamp)
             """)
             conn.execute("""
+                CREATE TABLE IF NOT EXISTS notifications (
+                    notification_id TEXT PRIMARY KEY,
+                    alert_id INTEGER,
+                    risk_level TEXT NOT NULL,
+                    risk_label TEXT,
+                    source_risk_level TEXT,
+                    risk_score REAL,
+                    person_id TEXT DEFAULT 'default',
+                    device_id TEXT DEFAULT 'default',
+                    occurred_at REAL NOT NULL,
+                    title TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    reason_codes_json TEXT,
+                    channels_json TEXT,
+                    ack_required INTEGER DEFAULT 0,
+                    acknowledged INTEGER DEFAULT 0,
+                    acknowledged_at REAL,
+                    ack_deadline_at REAL,
+                    fallback_enabled INTEGER DEFAULT 0,
+                    fallback_channel TEXT,
+                    fallback_state TEXT,
+                    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS notification_deliveries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    notification_id TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    provider_message_id TEXT,
+                    error_message TEXT,
+                    fallback_due_at REAL,
+                    sent_at REAL,
+                    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+                    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+                    UNIQUE(notification_id, channel)
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_notifications_occurred ON notifications(occurred_at)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_notification_delivery_notification ON notification_deliveries(notification_id)"
+            )
+            self._ensure_columns(
+                conn,
+                "notifications",
+                {"risk_label": "TEXT", "source_risk_level": "TEXT"},
+            )
+            self._ensure_columns(
+                conn,
+                "notification_deliveries",
+                {"sent_at": "REAL"},
+            )
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS audio_events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp REAL NOT NULL,
@@ -312,7 +368,168 @@ class Database:
                 "UPDATE alert_events SET acknowledged = 1 WHERE id = ?",
                 (alert_id,),
             )
+            if cursor.rowcount > 0:
+                return True
+            return conn.execute(
+                "SELECT 1 FROM alert_events WHERE id = ?", (alert_id,)
+            ).fetchone() is not None
+
+    # ── 通知事件 ──
+
+    def create_notification(self, payload: dict) -> None:
+        fallback = payload.get("fallback") or {}
+        with self._get_conn() as conn:
+            conn.execute(
+                """INSERT INTO notifications
+                   (notification_id, alert_id, risk_level, risk_label, source_risk_level, risk_score, person_id, device_id,
+                    occurred_at, title, message, reason_codes_json, channels_json,
+                    ack_required, acknowledged, ack_deadline_at, fallback_enabled,
+                    fallback_channel, fallback_state, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    payload["notification_id"], payload.get("alert_id"), payload["risk_level"],
+                    payload.get("risk_label"), payload.get("source_risk_level"),
+                    payload.get("risk_score"),
+                    payload.get("person_id", "default"),
+                    payload.get("device_id", "default"), payload["occurred_at"],
+                    payload.get("title", "风险通知"), payload.get("message", ""),
+                    json.dumps(payload.get("reason_codes", []), ensure_ascii=False),
+                    json.dumps(payload.get("channels", []), ensure_ascii=False),
+                    int(bool(payload.get("ack_required"))), 0, payload.get("ack_deadline_at"),
+                    int(bool(fallback.get("enabled"))), fallback.get("channel"),
+                    fallback.get("state"), payload.get("created_at"),
+                ),
+            )
+
+    def insert_notification_delivery(
+        self,
+        notification_id: str,
+        channel: str,
+        status: str,
+        provider_message_id: str | None = None,
+        error_message: str | None = None,
+        fallback_due_at: float | None = None,
+    ) -> None:
+        with self._get_conn() as conn:
+            conn.execute(
+                """INSERT INTO notification_deliveries
+                   (notification_id, channel, status, provider_message_id, error_message,
+                    fallback_due_at, sent_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+                   ON CONFLICT(notification_id, channel) DO UPDATE SET
+                     status=excluded.status, provider_message_id=excluded.provider_message_id,
+                     error_message=excluded.error_message, fallback_due_at=excluded.fallback_due_at,
+                     sent_at=excluded.sent_at,
+                     updated_at=datetime('now', 'localtime')""",
+                (
+                    notification_id,
+                    channel,
+                    status,
+                    provider_message_id,
+                    error_message,
+                    fallback_due_at,
+                    time.time() if status == "sent" else None,
+                ),
+            )
+
+    def update_notification_fallback(self, notification_id: str, state: str) -> bool:
+        with self._get_conn() as conn:
+            cursor = conn.execute(
+                "UPDATE notifications SET fallback_state=? WHERE notification_id=?",
+                (state, notification_id),
+            )
             return cursor.rowcount > 0
+
+    def acknowledge_notification(self, notification_id: str) -> bool:
+        with self._get_conn() as conn:
+            cursor = conn.execute(
+                """UPDATE notifications
+                   SET acknowledged=1, acknowledged_at=?
+                   WHERE notification_id=? AND acknowledged=0""",
+                (time.time(), notification_id),
+            )
+            return cursor.rowcount > 0
+
+    def _notification_from_row(self, row: sqlite3.Row | dict) -> dict:
+        record = dict(row)
+        for field_name, default in (("reason_codes_json", []), ("channels_json", [])):
+            try:
+                record[field_name.removesuffix("_json")] = json.loads(record.get(field_name) or "[]")
+            except json.JSONDecodeError:
+                record[field_name.removesuffix("_json")] = default
+        record["ack_required"] = bool(record.get("ack_required"))
+        record["acknowledged"] = bool(record.get("acknowledged"))
+        record["fallback"] = {
+            "enabled": bool(record.get("fallback_enabled")),
+            "channel": record.get("fallback_channel"),
+            "state": record.get("fallback_state"),
+        }
+        record.pop("reason_codes_json", None)
+        record.pop("channels_json", None)
+        record.pop("fallback_enabled", None)
+        record.pop("fallback_channel", None)
+        record.pop("fallback_state", None)
+        return record
+
+    def _attach_deliveries(self, record: dict) -> dict:
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM notification_deliveries WHERE notification_id=? ORDER BY id",
+                (record["notification_id"],),
+            ).fetchall()
+        record["deliveries"] = [dict(row) for row in rows]
+        return record
+
+    def get_notification(self, notification_id: str) -> dict | None:
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM notifications WHERE notification_id=?", (notification_id,)
+            ).fetchone()
+        return self._attach_deliveries(self._notification_from_row(row)) if row else None
+
+    def get_notification_by_alert_id(self, alert_id: int) -> dict | None:
+        with self._get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM notifications WHERE alert_id=? ORDER BY occurred_at DESC LIMIT 1",
+                (alert_id,),
+            ).fetchone()
+        return self._attach_deliveries(self._notification_from_row(row)) if row else None
+
+    def query_notifications(
+        self,
+        person_id: str | None = None,
+        device_id: str | None = None,
+        risk_level: str | None = None,
+        acknowledged: int | None = None,
+        start_time: float | None = None,
+        end_time: float | None = None,
+        fallback_state: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict]:
+        query = "SELECT * FROM notifications WHERE 1=1"
+        params: list[Any] = []
+        for field_name, value in (("person_id", person_id), ("device_id", device_id), ("risk_level", risk_level)):
+            if value:
+                query += f" AND {field_name}=?"
+                params.append(value)
+        if acknowledged is not None:
+            query += " AND acknowledged=?"
+            params.append(acknowledged)
+        if start_time is not None:
+            query += " AND occurred_at>=?"
+            params.append(start_time)
+        if end_time is not None:
+            query += " AND occurred_at<=?"
+            params.append(end_time)
+        if fallback_state:
+            query += " AND fallback_state=?"
+            params.append(fallback_state)
+        query += " ORDER BY occurred_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        with self._get_conn() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._attach_deliveries(self._notification_from_row(row)) for row in rows]
 
     # ── 音频事件 ──
 

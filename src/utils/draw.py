@@ -62,6 +62,9 @@ def draw_overlay(
     top_hazards: list[dict] | None = None,
     trajectory: dict | None = None,
     risk_score: float | None = None,
+    human_risk_score: float | None = None,
+    environment_risk_score: float | None = None,
+    interaction_risk_score: float | None = None,
 ) -> np.ndarray:
     """在帧上叠加骨架、风险等级等信息，返回新图像（不修改原图）"""
     canvas = frame.copy()
@@ -134,8 +137,64 @@ def draw_overlay(
     if illumination is not None:
         cv2.putText(canvas, f"light {illumination:.0f}/255", (12, 62),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (230, 230, 230), 1, cv2.LINE_AA)
+    _draw_risk_extension_panel(
+        canvas,
+        risk_level,
+        risk_score,
+        human_risk_score,
+        environment_risk_score,
+        interaction_risk_score,
+    )
 
     return canvas
+
+
+def _draw_risk_extension_panel(
+    canvas: np.ndarray,
+    risk_level: str,
+    overall_score: float | None,
+    human_score: float | None,
+    environment_score: float | None,
+    interaction_score: float | None,
+) -> None:
+    """在分析帧右上角显示 v0.3.2 分项工程指数（非概率）。"""
+    h, w = canvas.shape[:2]
+    panel_w = min(286, max(180, w - 16))
+    panel_h = 112
+    x = max(8, w - panel_w - 8)
+    y = 46
+    overlay = canvas.copy()
+    cv2.rectangle(overlay, (x, y), (x + panel_w, y + panel_h), (20, 20, 20), -1)
+    cv2.addWeighted(overlay, 0.72, canvas, 0.28, 0, canvas)
+    color = RISK_COLORS.get(risk_level, RISK_COLORS["low"])
+    overall_text = "UNKNOWN" if overall_score is None else f"{overall_score:.1f} / 100"
+    cv2.putText(
+        canvas,
+        f"ENGINEERING RISK: {overall_text}",
+        (x + 10, y + 21),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.48,
+        color,
+        2,
+        cv2.LINE_AA,
+    )
+    rows = (
+        ("HUMAN", human_score),
+        ("ENV", environment_score),
+        ("INTERACTION", interaction_score),
+    )
+    for index, (label, value) in enumerate(rows):
+        value_text = "UNKNOWN" if value is None else f"{value:.1f} / 100"
+        cv2.putText(
+            canvas,
+            f"{label}: {value_text}",
+            (x + 10, y + 46 + index * 19),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.4,
+            (245, 245, 245),
+            1,
+            cv2.LINE_AA,
+        )
 
 
 def _draw_box(canvas: np.ndarray, x1: float, y1: float, x2: float, y2: float,
