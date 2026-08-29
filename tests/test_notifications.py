@@ -52,6 +52,8 @@ def test_attention_dispatches_websocket_only():
         assert broadcast.call_count == 1
         assert broadcast.call_args.args[0]["type"] == "risk_notification"
         assert broadcast.call_args.args[0]["data"]["notification_id"] == payload["notification_id"]
+        assert "cloud_push" in broadcast.call_args.args[0]["data"]
+        assert payload["cloud_push"]["status"] == "not_applicable"
         assert db.get_notification(payload["notification_id"])["deliveries"][0]["status"] == "queued"
     finally:
         service.close()

@@ -140,7 +140,7 @@ Get-FileHash checkpoints\yolo26n-pose.pt -Algorithm SHA256
 
 ```powershell
 .\venv\Scripts\Activate.ps1
-python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 
 另开终端启动前端：

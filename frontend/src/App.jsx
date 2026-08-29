@@ -63,6 +63,47 @@ function normalizeRiskState(value) {
   return RISK_COUNT_LEVELS.includes(state) ? state : null
 }
 
+const DELIVERY_STATUS_LABELS = {
+  sent: '已发送',
+  queued: '已入队',
+  not_configured: '未配置',
+  not_applicable: '不适用',
+  failed: '发送失败',
+}
+
+function deliveryStatusLabel(value) {
+  return DELIVERY_STATUS_LABELS[value] || value || '未知'
+}
+
+function renderNotificationDelivery(alert) {
+  const notification = alert.notification
+  const level = notification?.risk_level || (alert.alert_level === 'warning' ? 'attention' : alert.alert_level)
+  if (!['attention', 'critical'].includes(level)) return null
+  if (!notification) {
+    return <div className="alert-delivery-status alert-delivery-unknown">暂无通知发送记录</div>
+  }
+  const cloudPush = notification.cloud_push
+  const deliveries = Array.isArray(notification.deliveries) ? notification.deliveries : []
+  const requestLabel = cloudPush ? deliveryStatusLabel(cloudPush.status) : '暂无结果'
+  const requestClass = cloudPush?.status === 'sent' ? 'sent' : cloudPush?.status === 'failed' ? 'failed' : 'pending'
+  return (
+    <div className="alert-delivery-status">
+      <span className={`alert-delivery-request ${requestClass}`}>
+        微信云函数请求：{requestLabel}
+      </span>
+      <span className="alert-delivery-meta">
+        riskLevel={level} · riskScore={formatRiskScore(notification.risk_score ?? alert.risk_score)}
+      </span>
+      {deliveries.map((delivery, index) => (
+        <span className="alert-delivery-channel" key={`${delivery.channel}-${index}`}>
+          {delivery.channel}: {deliveryStatusLabel(delivery.status)}
+        </span>
+      ))}
+      {cloudPush?.error && <span className="alert-delivery-error" title={cloudPush.error}>{cloudPush.error}</span>}
+    </div>
+  )
+}
+
 export default function App() {
   const [status, setStatus] = useState({
     is_running: false,
@@ -1077,13 +1118,16 @@ export default function App() {
           <div className="alert-list">
             {alerts.map((alert, i) => (
               <div key={i} className="alert-item">
-                <span className={`badge badge-${alert.alert_level || 'neutral'}`}>
-                  {LEVEL_LABELS[alert.alert_level] || alert.alert_level}
-                </span>
-                <span className="alert-message">{alert.message}</span>
-                <span className="alert-time mono">
-                  {new Date(alert.timestamp * 1000).toLocaleString('zh-CN')}
-                </span>
+                <div className="alert-item-main">
+                  <span className={`badge badge-${alert.alert_level || 'neutral'}`}>
+                    {LEVEL_LABELS[alert.alert_level] || alert.alert_level}
+                  </span>
+                  <span className="alert-message">{alert.message}</span>
+                  <span className="alert-time mono">
+                    {new Date(alert.timestamp * 1000).toLocaleString('zh-CN')}
+                  </span>
+                </div>
+                {renderNotificationDelivery(alert)}
               </div>
             ))}
           </div>

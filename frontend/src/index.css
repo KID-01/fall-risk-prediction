@@ -780,8 +780,9 @@ svg { display: inline-block; vertical-align: middle; }
 .alert-list { display: flex; flex-direction: column; }
 .alert-item {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
   padding: 12px 10px;
   border-bottom: 1px solid var(--fr-border);
   border-radius: var(--fr-radius-sm);
@@ -790,8 +791,49 @@ svg { display: inline-block; vertical-align: middle; }
 }
 .alert-item:hover { background: var(--fr-muted); }
 .alert-item:last-child { border-bottom: 0; }
+.alert-item-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
 .alert-message { flex: 1 1 auto; font-size: 14px; color: var(--fr-foreground); min-width: 0; }
 .alert-time { flex: 0 0 auto; font-size: 12px; color: var(--fr-muted-foreground); }
+.alert-delivery-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  padding-left: 2px;
+  color: var(--fr-muted-foreground);
+  font-size: 11px;
+  line-height: 1.5;
+  min-width: 0;
+}
+.alert-delivery-request,
+.alert-delivery-channel,
+.alert-delivery-meta {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.alert-delivery-request { font-weight: 700; }
+.alert-delivery-request.sent { color: var(--fr-risk-low); }
+.alert-delivery-request.failed { color: var(--fr-risk-critical); }
+.alert-delivery-request.pending { color: var(--fr-muted-foreground); }
+.alert-delivery-channel {
+  padding: 1px 6px;
+  border: 1px solid var(--fr-border);
+  border-radius: var(--fr-radius-sm, 6px);
+  background: var(--fr-card-glass);
+}
+.alert-delivery-error {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fr-risk-critical);
+}
+.alert-delivery-unknown { color: var(--fr-muted-foreground); }
 
 /* ============================================================
    音频监测组件层（AudioMonitor 内嵌）

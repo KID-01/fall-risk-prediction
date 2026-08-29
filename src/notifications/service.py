@@ -176,11 +176,17 @@ class NotificationService:
         self.db.create_notification(payload)
 
         # 云函数负责写入小程序告警库，并仅在 critical 时发送订阅消息。
-        cloud_push = self.wechat_adapter.send(
-            elder_id=person_id,
-            risk_level=level,
-            risk_score=risk_score,
+        # attention 只走页面 WebSocket，避免产生无意义的云函数失败提示。
+        cloud_push = (
+            self.wechat_adapter.send(
+                elder_id=person_id,
+                risk_level=level,
+                risk_score=risk_score,
+            )
+            if level == RiskLevel.CRITICAL.value
+            else {"enabled": False, "status": "not_applicable", "reason": "critical_only"}
         )
+        payload["cloud_push"] = cloud_push
         self.db.update_notification_cloud_push(notification_id, cloud_push)
 
         for channel in policy["channels"]:
@@ -188,9 +194,9 @@ class NotificationService:
             self.db.insert_notification_delivery(notification_id, channel, status)
 
         if level == RiskLevel.ATTENTION.value:
-            self._broadcast(payload)
+            self._broadcast(self._refresh_payload(notification_id))
         elif level == RiskLevel.CRITICAL.value:
-            self._broadcast(payload)
+            self._broadcast(self._refresh_payload(notification_id))
             self._schedule_fallback(notification_id, max(0.0, (ack_deadline_at or 0) - time.time()))
         else:
             log.info(f"低风险事件仅本地留存: person_id={person_id} device_id={device_id}")
