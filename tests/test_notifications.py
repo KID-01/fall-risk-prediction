@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from src.alerts.engine import AlertEvent, RiskLevel
 from src.api.database import Database
-from src.notifications.service import NotificationService
+from src.notifications.service import NotificationService, WechatCloudFunctionAdapter
 
 
 def _cleanup(db: Database, notification_ids: list[str]) -> None:
@@ -149,3 +149,37 @@ def test_notification_policy_and_detail_routes():
         assert set(response.json()["levels"]) == {"low", "attention", "critical"}
         missing = client.get("/api/v1/notifications/does-not-exist")
         assert missing.status_code == 404
+
+
+def test_wechat_cloud_function_payload_and_success_delivery():
+    db = Database()
+    adapter = WechatCloudFunctionAdapter(url="https://example.test/fallAlarmPush", enabled=True)
+    service = NotificationService(database=db, wechat_adapter=adapter)
+    ids: list[str] = []
+    class Response:
+        status_code = 200
+        is_success = True
+        def json(self):
+            return {"code": 0, "msg": "ok"}
+    try:
+        with patch("src.notifications.service.httpx.post", return_value=Response()) as post, \
+             patch("src.notifications.service.manager.broadcast_threadsafe"):
+            payload = service.dispatch(
+                AlertEvent(RiskLevel.CRITICAL, time.time(), "高危云函数测试"),
+                alert_id=None,
+                risk_score=86.4,
+                person_id="E001",
+                device_id="test",
+                reason_codes=["human_high"],
+            )
+        ids.append(payload["notification_id"])
+        post.assert_called_once_with(
+            "https://example.test/fallAlarmPush",
+            json={"elderId": "E001", "riskLevel": "critical", "riskScore": 86.4},
+            timeout=5.0,
+        )
+        assert payload["cloud_push"]["status"] == "sent"
+        assert payload["cloud_push"]["response"]["code"] == 0
+    finally:
+        service.close()
+        _cleanup(db, ids)

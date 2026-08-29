@@ -102,6 +102,7 @@ class Database:
                     fallback_enabled INTEGER DEFAULT 0,
                     fallback_channel TEXT,
                     fallback_state TEXT,
+                    cloud_push_json TEXT,
                     created_at TEXT DEFAULT (datetime('now', 'localtime'))
                 )
             """)
@@ -129,7 +130,7 @@ class Database:
             self._ensure_columns(
                 conn,
                 "notifications",
-                {"risk_label": "TEXT", "source_risk_level": "TEXT"},
+                {"risk_label": "TEXT", "source_risk_level": "TEXT", "cloud_push_json": "TEXT"},
             )
             self._ensure_columns(
                 conn,
@@ -384,8 +385,8 @@ class Database:
                    (notification_id, alert_id, risk_level, risk_label, source_risk_level, risk_score, person_id, device_id,
                     occurred_at, title, message, reason_codes_json, channels_json,
                     ack_required, acknowledged, ack_deadline_at, fallback_enabled,
-                    fallback_channel, fallback_state, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    fallback_channel, fallback_state, cloud_push_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     payload["notification_id"], payload.get("alert_id"), payload["risk_level"],
                     payload.get("risk_label"), payload.get("source_risk_level"),
@@ -397,9 +398,19 @@ class Database:
                     json.dumps(payload.get("channels", []), ensure_ascii=False),
                     int(bool(payload.get("ack_required"))), 0, payload.get("ack_deadline_at"),
                     int(bool(fallback.get("enabled"))), fallback.get("channel"),
-                    fallback.get("state"), payload.get("created_at"),
+                    fallback.get("state"), json.dumps(payload.get("cloud_push"), ensure_ascii=False)
+                    if payload.get("cloud_push") is not None else None,
+                    payload.get("created_at"),
                 ),
             )
+
+    def update_notification_cloud_push(self, notification_id: str, result: dict) -> bool:
+        with self._get_conn() as conn:
+            cursor = conn.execute(
+                "UPDATE notifications SET cloud_push_json=? WHERE notification_id=?",
+                (json.dumps(result or {}, ensure_ascii=False), notification_id),
+            )
+            return cursor.rowcount > 0
 
     def insert_notification_delivery(
         self,
@@ -457,6 +468,10 @@ class Database:
                 record[field_name.removesuffix("_json")] = json.loads(record.get(field_name) or "[]")
             except json.JSONDecodeError:
                 record[field_name.removesuffix("_json")] = default
+        try:
+            record["cloud_push"] = json.loads(record.get("cloud_push_json") or "null")
+        except json.JSONDecodeError:
+            record["cloud_push"] = None
         record["ack_required"] = bool(record.get("ack_required"))
         record["acknowledged"] = bool(record.get("acknowledged"))
         record["fallback"] = {
@@ -469,6 +484,7 @@ class Database:
         record.pop("fallback_enabled", None)
         record.pop("fallback_channel", None)
         record.pop("fallback_state", None)
+        record.pop("cloud_push_json", None)
         return record
 
     def _attach_deliveries(self, record: dict) -> dict:

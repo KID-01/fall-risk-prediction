@@ -1,13 +1,16 @@
 """多渠道风险通知服务。
 
-外部 APP、短信和电话供应商暂不接入，默认使用可替换的投递桩并记录状态。
+微信云函数上报适配器可通过环境变量启用；APP、短信和电话供应商仍使用投递桩。
 """
 from __future__ import annotations
 
 import threading
 import time
 from datetime import datetime
+import os
 from uuid import uuid4
+
+import httpx
 
 from src.alerts.engine import AlertEvent, RiskLevel
 from src.api.database import Database
@@ -15,6 +18,48 @@ from src.api.websocket import manager
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
+
+WECHAT_FALL_ALARM_PUSH_URL = os.getenv(
+    "WECHAT_FALL_ALARM_PUSH_URL",
+    "https://cloud1-d2gl1av2eb6e440e-1477389215.ap-shanghai.app.tcloudbase.com/fallAlarmPush",
+)
+
+
+class WechatCloudFunctionAdapter:
+    """将风险事件上报微信云函数；未启用时不发起外部请求。"""
+
+    def __init__(self, url: str | None = None, enabled: bool | None = None, timeout: float = 5.0):
+        self.url = url or WECHAT_FALL_ALARM_PUSH_URL
+        self.enabled = (
+            enabled
+            if enabled is not None
+            else os.getenv("WECHAT_FALL_ALARM_PUSH_ENABLED", "0").lower() in {"1", "true", "yes", "on"}
+        )
+        self.timeout = timeout
+
+    def send(self, *, elder_id: str, risk_level: str, risk_score: float) -> dict:
+        if not self.enabled:
+            return {"enabled": False, "status": "not_configured"}
+        body = {
+            "elderId": str(elder_id),
+            "riskLevel": risk_level,
+            "riskScore": round(float(risk_score), 2),
+        }
+        try:
+            response = httpx.post(self.url, json=body, timeout=self.timeout)
+            result = response.json()
+            if response.is_success and result.get("code") == 0:
+                return {"enabled": True, "status": "sent", "http_status": response.status_code, "response": result}
+            return {
+                "enabled": True,
+                "status": "failed",
+                "http_status": response.status_code,
+                "response": result,
+                "error": f"cloud_function_code={result.get('code')}",
+            }
+        except Exception as exc:
+            log.warning(f"微信云函数上报失败: {exc}")
+            return {"enabled": True, "status": "failed", "error": str(exc)}
 
 NOTIFICATION_POLICY = {
     "low": {
@@ -51,9 +96,15 @@ EXTERNAL_LEVEL_MAP = {
 class NotificationService:
     """创建风险通知、记录渠道投递并管理高危电话兜底。"""
 
-    def __init__(self, database: Database | None = None, fallback_seconds: int = 30):
+    def __init__(
+        self,
+        database: Database | None = None,
+        fallback_seconds: int = 30,
+        wechat_adapter: WechatCloudFunctionAdapter | None = None,
+    ):
         self.db = database or Database()
         self.fallback_seconds = int(fallback_seconds)
+        self.wechat_adapter = wechat_adapter or WechatCloudFunctionAdapter()
         self._timers: dict[str, threading.Timer] = {}
         self._lock = threading.Lock()
         self.recover_pending_fallbacks()
@@ -67,6 +118,11 @@ class NotificationService:
                 "websocket": "/ws/alerts",
                 "rest": "/api/v1/notifications",
                 "acknowledge": "/api/v1/alerts/{alert_id}/acknowledge",
+                "wechat_cloud_function": {
+                    "enabled_env": "WECHAT_FALL_ALARM_PUSH_ENABLED",
+                    "url_env": "WECHAT_FALL_ALARM_PUSH_URL",
+                    "payload": ["elderId", "riskLevel", "riskScore"],
+                },
             },
         }
 
@@ -118,6 +174,14 @@ class NotificationService:
             "deliveries": [],
         }
         self.db.create_notification(payload)
+
+        # 云函数负责写入小程序告警库，并仅在 critical 时发送订阅消息。
+        cloud_push = self.wechat_adapter.send(
+            elder_id=person_id,
+            risk_level=level,
+            risk_score=risk_score,
+        )
+        self.db.update_notification_cloud_push(notification_id, cloud_push)
 
         for channel in policy["channels"]:
             status = "queued" if channel == "websocket" else "not_configured"
