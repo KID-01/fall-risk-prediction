@@ -27,16 +27,22 @@ def test_policy_has_three_external_levels():
     policy = NotificationService.policy()
     assert set(policy["levels"]) == {"low", "attention", "critical"}
     assert policy["levels"]["low"]["channels"] == []
-    assert policy["levels"]["attention"]["channels"] == ["websocket"]
-    assert policy["levels"]["critical"]["channels"] == ["websocket", "app", "sms"]
+    assert policy["levels"]["attention"]["channels"] == ["cloud_function"]
+    assert policy["levels"]["critical"]["channels"] == ["cloud_function", "app", "sms"]
 
 
-def test_attention_dispatches_websocket_only():
+def test_attention_pushes_to_http_cloud_function():
     db = Database()
-    service = NotificationService(database=db, fallback_seconds=30)
+    adapter = WechatCloudFunctionAdapter(url="https://example.test/fallAlarmPush", enabled=True)
+    service = NotificationService(database=db, fallback_seconds=30, wechat_adapter=adapter)
     ids: list[str] = []
     try:
-        with patch("src.notifications.service.manager.broadcast_threadsafe") as broadcast:
+        class Response:
+            status_code = 200
+            is_success = True
+            def json(self):
+                return {"code": 0, "msg": "告警已入库"}
+        with patch("src.notifications.service.httpx.post", return_value=Response()) as post:
             payload = service.dispatch(
                 AlertEvent(RiskLevel.ATTENTION, time.time(), "关注测试"),
                 alert_id=None,
@@ -47,14 +53,18 @@ def test_attention_dispatches_websocket_only():
             )
         ids.append(payload["notification_id"])
         assert payload["risk_level"] == "attention"
-        assert payload["channels"] == ["websocket"]
+        assert payload["channels"] == ["cloud_function"]
         assert payload["ack_required"] is False
-        assert broadcast.call_count == 1
-        assert broadcast.call_args.args[0]["type"] == "risk_notification"
-        assert broadcast.call_args.args[0]["data"]["notification_id"] == payload["notification_id"]
-        assert "cloud_push" in broadcast.call_args.args[0]["data"]
-        assert payload["cloud_push"]["status"] == "not_applicable"
-        assert db.get_notification(payload["notification_id"])["deliveries"][0]["status"] == "queued"
+        post.assert_called_once_with(
+            "https://example.test/fallAlarmPush",
+            json={"action": "push", "data": {
+                "risk_label": "风险关注", "title": "风险关注提醒", "message": "关注测试",
+                "risk_level": "attention", "risk_score": 42.5, "isRead": False,
+            }},
+            timeout=5.0,
+        )
+        assert payload["cloud_push"]["status"] == "sent"
+        assert db.get_notification(payload["notification_id"])["deliveries"][0]["status"] == "sent"
     finally:
         service.close()
         _cleanup(db, ids)
@@ -65,7 +75,7 @@ def test_internal_warning_maps_to_external_attention():
     service = NotificationService(database=db)
     ids: list[str] = []
     try:
-        with patch("src.notifications.service.manager.broadcast_threadsafe"):
+        with patch("src.notifications.service.httpx.post"):
             payload = service.dispatch(
                 AlertEvent(RiskLevel.WARNING, time.time(), "趋势测试"),
                 alert_id=None,
@@ -77,7 +87,7 @@ def test_internal_warning_maps_to_external_attention():
         ids.append(payload["notification_id"])
         assert payload["source_risk_level"] == "warning"
         assert payload["risk_level"] == "attention"
-        assert payload["channels"] == ["websocket"]
+        assert payload["channels"] == ["cloud_function"]
     finally:
         service.close()
         _cleanup(db, ids)
@@ -89,7 +99,7 @@ def test_critical_fallback_is_cancelled_by_ack():
     ids: list[str] = []
     alert_id = int(time.time() * 1000) % 2_000_000_000
     try:
-        with patch("src.notifications.service.manager.broadcast_threadsafe"):
+        with patch("src.notifications.service.httpx.post"):
             payload = service.dispatch(
                 AlertEvent(RiskLevel.CRITICAL, time.time(), "高危测试"),
                 alert_id=alert_id,
@@ -99,8 +109,8 @@ def test_critical_fallback_is_cancelled_by_ack():
                 reason_codes=["human_high"],
             )
         ids.append(payload["notification_id"])
-        assert payload["channels"] == ["websocket", "app", "sms"]
-        assert {item["channel"] for item in payload["deliveries"]} == {"websocket", "app", "sms"}
+        assert payload["channels"] == ["cloud_function", "app", "sms"]
+        assert {item["channel"] for item in payload["deliveries"]} == {"cloud_function", "app", "sms"}
         assert service.acknowledge_alert(alert_id) is True
         updated = db.get_notification(payload["notification_id"])
         assert updated["acknowledged"] is True
@@ -117,7 +127,7 @@ def test_critical_fallback_creates_phone_stub_after_deadline():
     service = NotificationService(database=db, fallback_seconds=0)
     ids: list[str] = []
     try:
-        with patch("src.notifications.service.manager.broadcast_threadsafe"):
+        with patch("src.notifications.service.httpx.post"):
             payload = service.dispatch(
                 AlertEvent(RiskLevel.CRITICAL, time.time(), "兜底测试"),
                 alert_id=None,
@@ -164,8 +174,7 @@ def test_wechat_cloud_function_payload_and_success_delivery():
         def json(self):
             return {"code": 0, "msg": "ok"}
     try:
-        with patch("src.notifications.service.httpx.post", return_value=Response()) as post, \
-             patch("src.notifications.service.manager.broadcast_threadsafe"):
+        with patch("src.notifications.service.httpx.post", return_value=Response()) as post:
             payload = service.dispatch(
                 AlertEvent(RiskLevel.CRITICAL, time.time(), "高危云函数测试"),
                 alert_id=None,
@@ -177,7 +186,10 @@ def test_wechat_cloud_function_payload_and_success_delivery():
         ids.append(payload["notification_id"])
         post.assert_called_once_with(
             "https://example.test/fallAlarmPush",
-            json={"elderId": "E001", "riskLevel": "critical", "riskScore": 86.4},
+            json={"action": "push", "data": {
+                "risk_label": "跌倒高危", "title": "跌倒高危告警", "message": "高危云函数测试",
+                "risk_level": "critical", "risk_score": 86.4, "isRead": False,
+            }},
             timeout=5.0,
         )
         assert payload["cloud_push"]["status"] == "sent"

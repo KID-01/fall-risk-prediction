@@ -14,7 +14,6 @@ import httpx
 
 from src.alerts.engine import AlertEvent, RiskLevel
 from src.api.database import Database
-from src.api.websocket import manager
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -37,13 +36,27 @@ class WechatCloudFunctionAdapter:
         )
         self.timeout = timeout
 
-    def send(self, *, elder_id: str, risk_level: str, risk_score: float) -> dict:
+    def send(
+        self,
+        *,
+        risk_label: str,
+        title: str,
+        message: str,
+        risk_level: str,
+        risk_score: float,
+    ) -> dict:
         if not self.enabled:
             return {"enabled": False, "status": "not_configured"}
         body = {
-            "elderId": str(elder_id),
-            "riskLevel": risk_level,
-            "riskScore": round(float(risk_score), 2),
+            "action": "push",
+            "data": {
+                "risk_label": risk_label,
+                "title": title,
+                "message": message,
+                "risk_level": risk_level,
+                "risk_score": round(float(risk_score), 2),
+                "isRead": False,
+            },
         }
         try:
             response = httpx.post(self.url, json=body, timeout=self.timeout)
@@ -71,17 +84,17 @@ NOTIFICATION_POLICY = {
     },
     "attention": {
         "label": "关注级",
-        "channels": ["websocket"],
+        "channels": ["cloud_function"],
         "ack_required": False,
         "fallback": None,
-        "description": "通过 WebSocket 推送看板提醒",
+        "description": "通过云函数 HTTP 网关写入小程序告警列表",
     },
     "critical": {
         "label": "高危级",
-        "channels": ["websocket", "app", "sms"],
+        "channels": ["cloud_function", "app", "sms"],
         "ack_required": True,
         "fallback": {"enabled": True, "channel": "phone", "delay_seconds": 30},
-        "description": "Web、APP、短信同步通知，30 秒未确认触发电话兜底",
+        "description": "云函数 HTTP 网关写入小程序告警列表，30 秒未确认触发电话兜底",
     },
 }
 EXTERNAL_LEVEL_MAP = {
@@ -115,13 +128,13 @@ class NotificationService:
             "version": "risk-notification-v1",
             "levels": NOTIFICATION_POLICY,
             "transport": {
-                "websocket": "/ws/alerts",
                 "rest": "/api/v1/notifications",
                 "acknowledge": "/api/v1/alerts/{alert_id}/acknowledge",
                 "wechat_cloud_function": {
                     "enabled_env": "WECHAT_FALL_ALARM_PUSH_ENABLED",
                     "url_env": "WECHAT_FALL_ALARM_PUSH_URL",
-                    "payload": ["elderId", "riskLevel", "riskScore"],
+                    "mode": "http_gateway",
+                    "payload": ["action", "data.risk_label", "data.title", "data.message", "data.risk_level", "data.risk_score", "data.isRead"],
                 },
             },
         }
@@ -147,6 +160,8 @@ class NotificationService:
             time.time() + self.fallback_seconds if policy["ack_required"] else None
         )
         fallback_state = "scheduled" if policy["ack_required"] else None
+        title = "跌倒高危告警" if level == RiskLevel.CRITICAL.value else "风险关注提醒"
+        cloud_risk_label = "跌倒高危" if level == RiskLevel.CRITICAL.value else "风险关注"
         payload = {
             "notification_id": notification_id,
             "alert_id": alert_id,
@@ -157,7 +172,7 @@ class NotificationService:
             "person_id": person_id,
             "device_id": device_id,
             "occurred_at": occurred_at,
-            "title": "跌倒风险告警",
+            "title": title,
             "message": alert.message,
             "reason_codes": list(reason_codes),
             "channels": list(policy["channels"]),
@@ -175,31 +190,34 @@ class NotificationService:
         }
         self.db.create_notification(payload)
 
-        # 云函数负责写入小程序告警库，并仅在 critical 时发送订阅消息。
-        # attention 只走页面 WebSocket，避免产生无意义的云函数失败提示。
+        # 小程序方案 A：关注级和高危级均写入云函数 fall_alerts；前端通过 action=pull 轮询。
         cloud_push = (
             self.wechat_adapter.send(
-                elder_id=person_id,
+                risk_label=cloud_risk_label,
+                title=title,
+                message=alert.message,
                 risk_level=level,
                 risk_score=risk_score,
             )
-            if level == RiskLevel.CRITICAL.value
-            else {"enabled": False, "status": "not_applicable", "reason": "critical_only"}
+            if level != RiskLevel.LOW.value
+            else {"enabled": False, "status": "not_applicable", "reason": "low_local_only"}
         )
         payload["cloud_push"] = cloud_push
         self.db.update_notification_cloud_push(notification_id, cloud_push)
 
         for channel in policy["channels"]:
-            status = "queued" if channel == "websocket" else "not_configured"
-            self.db.insert_notification_delivery(notification_id, channel, status)
+            if channel == "cloud_function":
+                self.db.insert_notification_delivery(
+                    notification_id,
+                    channel,
+                    cloud_push["status"],
+                    error_message=cloud_push.get("error"),
+                )
+            else:
+                self.db.insert_notification_delivery(notification_id, channel, "not_configured")
 
-        if level == RiskLevel.ATTENTION.value:
-            self._broadcast(self._refresh_payload(notification_id))
-        elif level == RiskLevel.CRITICAL.value:
-            self._broadcast(self._refresh_payload(notification_id))
+        if level == RiskLevel.CRITICAL.value:
             self._schedule_fallback(notification_id, max(0.0, (ack_deadline_at or 0) - time.time()))
-        else:
-            log.info(f"低风险事件仅本地留存: person_id={person_id} device_id={device_id}")
         return self._refresh_payload(notification_id)
 
     def acknowledge_alert(self, alert_id: int) -> bool:
@@ -214,7 +232,6 @@ class NotificationService:
             timer.cancel()
         if notification.get("fallback", {}).get("state") == "scheduled":
             self.db.update_notification_fallback(notification["notification_id"], "cancelled")
-        self._broadcast(self._refresh_payload(notification["notification_id"]))
         return True
 
     def recover_pending_fallbacks(self) -> None:
@@ -261,13 +278,7 @@ class NotificationService:
             "not_configured",
             fallback_due_at=notification.get("ack_deadline_at"),
         )
-        payload = self._refresh_payload(notification_id)
         log.warning(f"高危通知未在30秒内确认，电话兜底待接入: {notification_id}")
-        self._broadcast(payload)
-
-    @staticmethod
-    def _broadcast(payload: dict) -> None:
-        manager.broadcast_threadsafe({"type": "risk_notification", "data": payload})
 
     def _refresh_payload(self, notification_id: str) -> dict:
         return self.db.get_notification(notification_id) or {"notification_id": notification_id}
