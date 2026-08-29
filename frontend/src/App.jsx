@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import * as echarts from 'echarts'
 import AudioMonitor from './AudioMonitor'
 import EzvizPlayer from './EzvizPlayer'
-import { Shield, Moon, Sun, RefreshCw, Play, Square, RotateCcw, AlertTriangle, MonitorPlay, Video, Bell, ChartLine, AudioLines, Loader } from './icons'
+import { Shield, Moon, Sun, RefreshCw, Play, Square, RotateCcw, AlertTriangle, MonitorPlay, Video, Bell, ChartLine, AudioLines, Loader, Upload } from './icons'
 
 const API_BASE = '/api/v1'
 const LEVEL_LABELS = { low: '低风险', attention: '关注级', warning: '预警级', critical: '高危级' }
+const MAX_VIDEO_ASPECT_RATIO = 16 / 9
+const MIN_VIDEO_ASPECT_RATIO = 3 / 4
 const OBJECT_LABELS = {
   chair: '椅子', couch: '沙发', bed: '床', 'dining table': '餐桌',
   backpack: '背包', suitcase: '行李箱', 'sports ball': '球', laptop: '笔记本电脑',
@@ -26,6 +28,15 @@ function hexToRgba(hex, alpha) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim())
   if (!m) return hex
   return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${alpha})`
+}
+
+function formatRiskScore(value) {
+  const score = Number(value)
+  return Number.isFinite(score) ? score.toFixed(1) : '--'
+}
+
+function riskScoreClass(state) {
+  return `risk-score risk-${String(state || 'unknown').toLowerCase()}`
 }
 
 export default function App() {
@@ -55,12 +66,20 @@ export default function App() {
   const [devicesLoading, setDevicesLoading] = useState(false)
   const [controlError, setControlError] = useState('')
   const [videoTab, setVideoTab] = useState('analysis')
+  const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9)
   const [environmentPanelPercent, setEnvironmentPanelPercent] = useState(24)
   const resizingEnvironmentRef = useRef(false)
   const [playerConfig, setPlayerConfig] = useState(null)
   const [rawPlayerLoaded, setRawPlayerLoaded] = useState(false)
   const [playerState, setPlayerState] = useState('idle')
   const [playerError, setPlayerError] = useState('')
+  const [developerUploading, setDeveloperUploading] = useState(false)
+  const [developerStarting, setDeveloperStarting] = useState(false)
+  const [developerUpload, setDeveloperUpload] = useState(null)
+  const [developerVideoName, setDeveloperVideoName] = useState('')
+  const [developerVideoActive, setDeveloperVideoActive] = useState(false)
+  const developerVideoInputRef = useRef(null)
+  const wasRunningRef = useRef(false)
 
   useEffect(() => {
     const move = (event) => {
@@ -88,6 +107,14 @@ export default function App() {
   const trendRef = useRef(null)
 
   const selectedDevice = devices.find(device => device.device_id === selectedDeviceId)
+
+  const handleVideoImageLoad = useCallback((event) => {
+    const { naturalWidth, naturalHeight } = event.currentTarget
+    if (!naturalWidth || !naturalHeight) return
+    const sourceRatio = naturalWidth / naturalHeight
+    const nextRatio = Math.min(MAX_VIDEO_ASPECT_RATIO, Math.max(MIN_VIDEO_ASPECT_RATIO, sourceRatio))
+    setVideoAspectRatio(current => Math.abs(current - nextRatio) > 0.01 ? nextRatio : current)
+  }, [])
 
   const fetchEzvizDevices = useCallback(async () => {
     setDevicesLoading(true)
@@ -190,6 +217,8 @@ export default function App() {
   // ── 视频 WebSocket (分析画面 — 骨骼叠加) ──
   useEffect(() => {
     if (videoTab !== 'analysis') return undefined
+
+    setVideoAspectRatio(16 / 9)
 
     let stopped = false
     let currentObjectUrl = ''
@@ -441,11 +470,96 @@ export default function App() {
       setPlayerError('')
       setPlayerState('idle')
       setVideoTab('analysis')
+      setDeveloperVideoName('')
+      setDeveloperVideoActive(false)
       fetchStatus()
     } catch (_) {
       setControlError('无法连接后端服务，请确认 FastAPI 已启动')
     }
   }
+  const uploadDeveloperVideo = async event => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setDeveloperUploading(true)
+    setControlError('')
+    setPlayerError('')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('person_id', personId || 'default')
+      form.append('device_id', selectedDeviceId || 'default')
+      form.append('audio_source', audioSource || 'off')
+      const response = await fetch(`${API_BASE}/stream/upload`, { method: 'POST', body: form })
+      if (!response.ok) {
+        setControlError(await readError(response))
+        return
+      }
+      const payload = await response.json()
+      setDeveloperUpload({ ...payload, source_name: payload.source_name || file.name })
+    } catch (_) {
+      setControlError('无法上传视频，请确认后端服务已启动')
+    } finally {
+      setDeveloperUploading(false)
+    }
+  }
+
+  const cancelDeveloperUpload = async () => {
+    const uploadId = developerUpload?.upload_id
+    setDeveloperUpload(null)
+    if (!uploadId) return
+    try {
+      const response = await fetch(`${API_BASE}/stream/upload/${encodeURIComponent(uploadId)}`, { method: 'DELETE' })
+      if (!response.ok && response.status !== 404) setControlError(await readError(response))
+    } catch (_) {
+      setControlError('无法取消暂存视频，请确认后端服务已启动')
+    }
+  }
+
+  const startDeveloperAnalysis = async () => {
+    if (!developerUpload?.upload_id || developerStarting) return
+    setDeveloperStarting(true)
+    setControlError('')
+    try {
+      const response = await fetch(`${API_BASE}/stream/upload/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          upload_id: developerUpload.upload_id,
+          person_id: personId || 'default',
+          device_id: selectedDeviceId || 'default',
+          audio_source: audioSource || 'off',
+        }),
+      })
+      if (!response.ok) {
+        setControlError(await readError(response))
+        return
+      }
+      const payload = await response.json()
+      setDeveloperUpload(null)
+      setDeveloperVideoName(payload.source_name || developerUpload.source_name)
+      setDeveloperVideoActive(true)
+      setPlayerConfig(null)
+      setRawPlayerLoaded(false)
+      setVideoAspectRatio(MAX_VIDEO_ASPECT_RATIO)
+      setVideoTab('analysis')
+      fetchStatus()
+    } catch (_) {
+      setControlError('无法开始视频分析，请确认后端服务已启动')
+    } finally {
+      setDeveloperStarting(false)
+    }
+  }
+
+  useEffect(() => {
+    if (status.is_running) {
+      wasRunningRef.current = true
+    } else if (wasRunningRef.current) {
+      wasRunningRef.current = false
+      setDeveloperVideoName('')
+      setDeveloperVideoActive(false)
+    }
+  }, [status.is_running])
   const refreshPlayer = async () => {
     if (!selectedDeviceId) return
     setPlayerState('loading')
@@ -626,7 +740,7 @@ export default function App() {
           <div className="video-head-right">
             <div className="seg" role="tablist" aria-label="视频画面">
               <button type="button" role="tab" aria-selected={videoTab === 'analysis'} className={videoTab === 'analysis' ? 'active' : ''} onClick={() => setVideoTab('analysis')}>AI 分析画面</button>
-              <button type="button" role="tab" aria-selected={videoTab === 'raw'} className={videoTab === 'raw' ? 'active' : ''} onClick={() => setVideoTab('raw')} disabled={sourceMode !== 'ezviz'}>萤石原始画面</button>
+              <button type="button" role="tab" aria-selected={videoTab === 'raw'} className={videoTab === 'raw' ? 'active' : ''} onClick={() => setVideoTab('raw')} disabled={sourceMode !== 'ezviz' || developerVideoActive}>萤石原始画面</button>
               <button type="button" role="tab" aria-selected={videoTab === 'audio'} className={videoTab === 'audio' ? 'active' : ''} onClick={() => setVideoTab('audio')}>
                 <AudioLines size={13} /> 声音监测
               </button>
@@ -637,23 +751,72 @@ export default function App() {
             </span>
           </div>
         </div>
-        <div className="video-frame-wrap" style={videoTab === 'analysis' ? { '--environment-width': `${environmentPanelPercent}%` } : undefined}>
+        <div
+          className="video-frame-wrap"
+          style={videoTab === 'analysis'
+            ? {
+                '--environment-width': `${environmentPanelPercent}%`,
+                '--video-aspect-ratio': videoAspectRatio,
+              }
+            : undefined}
+        >
           {videoTab === 'analysis' ? (
             <>
-              <img ref={videoImgRef} alt="AI 分析实时画面" className="video-frame" />
+              <div className="analysis-video-frame">
+                <img ref={videoImgRef} onLoad={handleVideoImageLoad} alt="AI 分析实时画面" className="video-frame" />
+              </div>
               <div className="environment-resize-handle" role="separator" aria-label="调整环境检测栏宽度" onMouseDown={() => { resizingEnvironmentRef.current = true; document.body.style.cursor = 'col-resize' }} />
+              <div className="developer-tool-float">
+                <button
+                  type="button"
+                  className="developer-tool-button"
+                  title="开发者工具"
+                  aria-label="开发者工具"
+                  onClick={() => developerVideoInputRef.current?.click()}
+                  disabled={developerUploading || developerStarting}
+                >
+                  {developerUploading ? <Loader size={16} className="spin" /> : <Upload size={16} />}
+                </button>
+                <input
+                  ref={developerVideoInputRef}
+                  className="developer-video-input"
+                  type="file"
+                  accept=".mp4,.avi,.mov,.mkv,.webm"
+                  onChange={uploadDeveloperVideo}
+                />
+                {developerUpload && (
+                  <div className="developer-upload-confirm" role="status">
+                    <strong title={developerUpload.source_name}>待分析：{developerUpload.source_name}</strong>
+                    <div className="developer-upload-actions">
+                      <button type="button" className="btn btn-primary btn-sm" onClick={startDeveloperAnalysis} disabled={developerStarting}>
+                        {developerStarting ? <Loader size={13} className="spin" /> : <Play size={13} />} 开始分析
+                      </button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={cancelDeveloperUpload} disabled={developerStarting}>取消</button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <aside className="analysis-environment-panel">
                 <div className="environment-model-status">
                   Pose {status.pose_model_loaded ? '已加载' : '待加载'} · 环境 {status.environment_model_loaded ? '已加载' : '待加载'} · {status.is_running ? '实时监测' : '未启动'}
                 </div>
+                <div className="environment-risk-summary">
+                  <div className="environment-risk-metric">
+                    <span>综合环境风险</span>
+                    <b className={riskScoreClass(status.environment?.state)}>{formatRiskScore(status.environment?.risk_index)}</b>
+                  </div>
+                  <div className="environment-risk-metric">
+                    <span>交互风险</span>
+                    <b className={riskScoreClass(status.interaction?.state)}>{formatRiskScore(status.interaction?.risk_index)}</b>
+                  </div>
+                </div>
+                <h3>环境检测</h3>
                 <div className="environment-extension-grid">
-                  <span>环境指数 <b>{status.environment?.risk_index == null ? '--' : status.environment.risk_index.toFixed(1)}</b></span>
                   <span>照明 <b>{status.low_light?.state || '--'}</b></span>
                   <span>障碍物 <b>{status.obstacle?.state || '--'}</b></span>
                   <span>轨迹 <b>{status.trajectory?.state || '--'}</b></span>
                   <span>交互 <b>{status.interaction?.state || '--'}</b></span>
                 </div>
-                <h3>环境检测</h3>
                 <div>识别目标: {status.environment_count || 0}</div>
                 {status.environment_error && <div className="text-error">模型不可用</div>}
                 {status.environment?.stale && <div className="text-error">环境结果已过期</div>}
@@ -672,6 +835,7 @@ export default function App() {
                   </div>
                 ))}
                 <div>光照亮度: {status.illumination == null ? '--' : `${Math.round(status.illumination)}/255`}</div>
+                {developerVideoName && developerVideoActive && <div className="developer-video-name" title={developerVideoName}>开发者视频：{developerVideoName}</div>}
               </aside>
               {status.is_running && (
                 <div className="video-detection-summary">

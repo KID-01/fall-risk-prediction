@@ -8,6 +8,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from src.alerts.engine import AlertEngine, AlertEvent, RiskLevel
 from src.api.database import Database
@@ -51,6 +52,9 @@ class MonitorStatus:
     person_id: str = "default"
     device_id: str = "default"
     source: str = ""
+    source_type: str = "unknown"
+    source_name: str = ""
+    temporary_source_path: str | None = None
     frames_processed: int = 0
     frames_valid: int = 0
     last_feature: FeatureVector | None = None
@@ -156,6 +160,7 @@ class FallRiskMonitor:
         # 运行控制
         self._thread: threading.Thread | None = None
         self._stop_flag = threading.Event()
+        self._temporary_source_lock = threading.Lock()
         self._keypoint_buffer: list[KeypointFrame] = []
         self._buffer_window = 30  # 特征计算窗口帧数
 
@@ -165,6 +170,7 @@ class FallRiskMonitor:
         person_id: str = "default",
         device_id: str = "default",
         audio_source: str | None = None,
+        temporary_source_path: str | None = None,
     ) -> bool:
         """启动监控"""
         if self.status.is_running:
@@ -208,6 +214,9 @@ class FallRiskMonitor:
             person_id=person_id,
             device_id=device_id,
             source=source,
+            source_type="uploaded" if temporary_source_path else "stream",
+            source_name=Path(source).name if temporary_source_path else "",
+            temporary_source_path=temporary_source_path,
             audio_enabled=audio_enabled,
             audio_source=effective_audio_source if audio_enabled else "",
         )
@@ -246,6 +255,23 @@ class FallRiskMonitor:
         if self.video_capture:
             self.video_capture.close()
             self.video_capture = None
+        self._cleanup_temporary_source()
+
+    def _cleanup_temporary_source(self) -> None:
+        """删除当前会话创建的上传文件，不触碰普通视频源。"""
+        lock = getattr(self, "_temporary_source_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._temporary_source_lock = lock
+        with lock:
+            path_value = self.status.temporary_source_path
+            self.status.temporary_source_path = None
+        if not path_value:
+            return
+        try:
+            Path(path_value).unlink(missing_ok=True)
+        except OSError as exc:
+            log.warning(f"清理上传视频失败: {exc}")
 
     def _run(self):
         """监控主循环(在子线程运行)"""
@@ -583,6 +609,7 @@ class FallRiskMonitor:
         finally:
             self.status.is_running = False
             self.video_capture = None
+            self._cleanup_temporary_source()
 
     @staticmethod
     def _match_environment_person(
@@ -761,7 +788,13 @@ class FallRiskMonitor:
             "is_running": self.status.is_running,
             "person_id": self.status.person_id,
             "device_id": self.status.device_id,
-            "source": self.status.source,
+            "source": (
+                self.status.source_type
+                if self.status.source_type == "uploaded"
+                else self.status.source
+            ),
+            "source_type": self.status.source_type,
+            "source_name": self.status.source_name,
             "frames_processed": self.status.frames_processed,
             "frames_valid": self.status.frames_valid,
             "current_risk_level": self.status.current_risk_level.value,

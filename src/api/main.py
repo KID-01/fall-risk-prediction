@@ -10,6 +10,9 @@ API 路由 (RESTful + WebSocket):
   GET  /alerts/levels                 预警分级规则
 
   POST /api/v1/stream/start           启动视频流分析
+  POST /api/v1/stream/upload          上传并暂存测试视频
+  POST /api/v1/stream/upload/start    确认并启动测试视频分析
+  DELETE /api/v1/stream/upload/{id}   取消暂存测试视频
   POST /api/v1/stream/stop            停止视频流分析
   GET  /api/v1/risk/current           当前风险状态
   GET  /api/v1/risk/history           历史风险记录(分页)
@@ -36,7 +39,14 @@ from omegaconf import OmegaConf
 
 from src.api.audio_routes import audio_router
 from src.api.ezviz_routes import ezviz_router
-from src.api.routes import alerts_router, audio_events_router, monitor_router, stats_router
+from src.api.routes import (
+    alerts_router,
+    audio_events_router,
+    cleanup_staged_videos,
+    monitor,
+    monitor_router,
+    stats_router,
+)
 from src.api.websocket import (
     raw_video_websocket_endpoint,
     video_websocket_endpoint,
@@ -65,6 +75,8 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        monitor.stop()
+        cleanup_staged_videos()
         if app.state.ezviz_client is not None:
             await app.state.ezviz_client.close()
         log.info("FastAPI 服务关闭")
