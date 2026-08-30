@@ -20,14 +20,20 @@ log = get_logger(__name__)
 
 WECHAT_FALL_ALARM_PUSH_URL = os.getenv(
     "WECHAT_FALL_ALARM_PUSH_URL",
-    "https://cloud1-d2gl1av2eb6e440e-1477389215.ap-shanghai.app.tcloudbase.com/fallAlarmPush",
+    "https://cloud1-d2gl1lav2eb6e440e-1477389215.ap-shanghai.app.tcloudbase.com/fallAlarmPush",
 )
 
 
 class WechatCloudFunctionAdapter:
     """将风险事件上报微信云函数；未启用时不发起外部请求。"""
 
-    def __init__(self, url: str | None = None, enabled: bool | None = None, timeout: float = 5.0):
+    def __init__(
+        self,
+        url: str | None = None,
+        enabled: bool | None = None,
+        timeout: float = 5.0,
+        payload_mode: str | None = None,
+    ):
         self.url = url or WECHAT_FALL_ALARM_PUSH_URL
         self.enabled = (
             enabled
@@ -35,6 +41,9 @@ class WechatCloudFunctionAdapter:
             else os.getenv("WECHAT_FALL_ALARM_PUSH_ENABLED", "0").lower() in {"1", "true", "yes", "on"}
         )
         self.timeout = timeout
+        # legacy 保持现有 action/data 契约；hybrid 同时携带顶层字段，
+        # 可兼容只读取 elderId/riskLevel/riskScore 的公网网关版本。
+        self.payload_mode = (payload_mode or os.getenv("WECHAT_FALL_ALARM_PUSH_PAYLOAD_MODE", "legacy")).lower()
 
     def send(
         self,
@@ -44,31 +53,54 @@ class WechatCloudFunctionAdapter:
         message: str,
         risk_level: str,
         risk_score: float,
+        person_id: str = "default",
     ) -> dict:
         if not self.enabled:
             return {"enabled": False, "status": "not_configured"}
+        data = {
+            "risk_label": risk_label,
+            "title": title,
+            "message": message,
+            "risk_level": risk_level,
+            "risk_score": round(float(risk_score), 2),
+            "isRead": False,
+        }
         body = {
             "action": "push",
-            "data": {
-                "risk_label": risk_label,
-                "title": title,
-                "message": message,
-                "risk_level": risk_level,
-                "risk_score": round(float(risk_score), 2),
-                "isRead": False,
-            },
+            "data": data,
         }
+        if self.payload_mode in {"hybrid", "flat"}:
+            # 顶层字段是方案 A 公网网关的最小契约；保留 data/action 供旧云函数使用。
+            body.update({
+                "elderId": person_id,
+                "riskLevel": risk_level,
+                "riskScore": round(float(risk_score), 2),
+            })
+        if self.payload_mode == "flat":
+            body = {
+                "elderId": person_id,
+                "riskLevel": risk_level,
+                "riskScore": round(float(risk_score), 2),
+            }
         try:
             response = httpx.post(self.url, json=body, timeout=self.timeout)
-            result = response.json()
-            if response.is_success and result.get("code") == 0:
+            # CloudBase 网关可能以 text/plain 返回空正文；HTTP 2xx 已表示请求被网关接收，
+            # 不能因 response.json() 解析失败而把已送达的告警标记为失败。
+            has_text = hasattr(response, "text")
+            raw_text = (getattr(response, "text", "") or "").strip()
+            try:
+                # 测试替身可能只实现 json()；真实 httpx 响应则用正文是否为空判断。
+                result = response.json() if (raw_text or not has_text) else None
+            except ValueError:
+                result = None
+            if response.is_success and (result is None or result.get("code") == 0):
                 return {"enabled": True, "status": "sent", "http_status": response.status_code, "response": result}
             return {
                 "enabled": True,
                 "status": "failed",
                 "http_status": response.status_code,
                 "response": result,
-                "error": f"cloud_function_code={result.get('code')}",
+                "error": f"cloud_function_code={result.get('code') if result else 'unknown'}",
             }
         except Exception as exc:
             log.warning(f"微信云函数上报失败: {exc}")
@@ -133,6 +165,8 @@ class NotificationService:
                 "wechat_cloud_function": {
                     "enabled_env": "WECHAT_FALL_ALARM_PUSH_ENABLED",
                     "url_env": "WECHAT_FALL_ALARM_PUSH_URL",
+                    "payload_mode_env": "WECHAT_FALL_ALARM_PUSH_PAYLOAD_MODE",
+                    "payload_modes": ["legacy", "hybrid", "flat"],
                     "mode": "http_gateway",
                     "payload": ["action", "data.risk_label", "data.title", "data.message", "data.risk_level", "data.risk_score", "data.isRead"],
                 },
@@ -198,6 +232,7 @@ class NotificationService:
                 message=alert.message,
                 risk_level=level,
                 risk_score=risk_score,
+                person_id=person_id,
             )
             if level != RiskLevel.LOW.value
             else {"enabled": False, "status": "not_applicable", "reason": "low_local_only"}
