@@ -35,6 +35,10 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
+# 模型加载全局锁 — torch.load 临时 patch 是进程级的, 多个 AudioAnalyzer 实例
+# (API 路由 + 监控) 并发首次加载时会互相干扰, 用模块级锁串行化
+_MODEL_LOAD_LOCK = threading.Lock()
+
 # ==== 声音类别标签映射 (AudioSet 527 类索引) ====
 VOCAL_DISTRESS_LABELS: dict[int, str] = {
     8: "Shout",
@@ -288,33 +292,36 @@ class AudioAnalyzer:
         """懒加载 PANNs 模型 — 双检锁, 构造期间临时修补 torch.load"""
         if self._model is not None:
             return
-        with self._lock:
+        with _MODEL_LOAD_LOCK:
             if self._model is not None:
                 return
+            with self._lock:
+                if self._model is not None:
+                    return
 
-            checkpoint = Path(self.checkpoint_path).expanduser()
-            if not checkpoint.is_file():
-                raise RuntimeError(
-                    f"checkpoint 不存在: {checkpoint} — 请下载 Cnn14_mAP=0.431.pth 并放置到该路径"
-                )
-            labels_csv = Path.home() / "panns_data" / "class_labels_indices.csv"
-            if not labels_csv.is_file():
-                raise RuntimeError(
-                    f"标签文件不存在: {labels_csv} — 请放置 class_labels_indices.csv (527 类)"
-                )
+                checkpoint = Path(self.checkpoint_path).expanduser()
+                if not checkpoint.is_file():
+                    raise RuntimeError(
+                        f"checkpoint 不存在: {checkpoint} — 请下载 Cnn14_mAP=0.431.pth 并放置到该路径"
+                    )
+                labels_csv = Path.home() / "panns_data" / "class_labels_indices.csv"
+                if not labels_csv.is_file():
+                    raise RuntimeError(
+                        f"标签文件不存在: {labels_csv} — 请放置 class_labels_indices.csv (527 类)"
+                    )
 
-            import torch
+                import torch
 
-            original_load = torch.load
-            try:
-                # PyTorch 2.6+ 默认 weights_only=True, 无法加载含非张量对象的 PANNs checkpoint
-                torch.load = lambda *a, **k: original_load(*a, **{**k, "weights_only": False})
-                audio_tagging_cls = _import_audiotagging()
-                self._model = audio_tagging_cls(
-                    checkpoint_path=str(checkpoint), device=self.device
-                )
-            finally:
-                torch.load = original_load
+                original_load = torch.load
+                try:
+                    # PyTorch 2.6+ 默认 weights_only=True, 无法加载含非张量对象的 PANNs checkpoint
+                    torch.load = lambda *a, **k: original_load(*a, **{**k, "weights_only": False})
+                    audio_tagging_cls = _import_audiotagging()
+                    self._model = audio_tagging_cls(
+                        checkpoint_path=str(checkpoint), device=self.device
+                    )
+                finally:
+                    torch.load = original_load
 
 
 def _import_audiotagging():

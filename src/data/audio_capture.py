@@ -39,7 +39,7 @@ class AudioChunk:
 
     waveform: np.ndarray          # float32, 单声道 (N,)
     sample_rate: int              # 目标采样率 (如 32000)
-    timestamp: float              # 块起始时间(秒, 相对监控启动)
+    timestamp: float              # 块起始时间(秒, 相对采集启动)
     duration_sec: float           # 实际时长(秒)
 
 
@@ -131,7 +131,6 @@ class AudioCapture:
         self._ffmpeg_proc: subprocess.Popen | None = None
         self._mic_stream = None
         self._is_open = False
-        self._start_time: float | None = None
         self._total_read_sec = 0.0
 
     # ========================================================
@@ -186,10 +185,7 @@ class AudioCapture:
             if not self.open():
                 raise RuntimeError(f"无法打开音频源: {self.source}")
 
-        self._start_time = time.time()
         self._total_read_sec = 0.0
-        # 音频事件与视频帧都使用监控启动后的相对时间轴。
-        self._base_timestamp = 0.0
 
         try:
             while not self.stop_event.is_set():
@@ -399,7 +395,7 @@ class AudioCapture:
         if wave.ndim == 2:
             wave = wave.mean(axis=1)
 
-        timestamp = self._base_timestamp + self._total_read_sec
+        timestamp = self._total_read_sec
         self._total_read_sec += accumulated_samples / self.sample_rate
         duration = accumulated_samples / self.sample_rate
 
@@ -425,11 +421,18 @@ class AudioCapture:
                 log.info("ffmpeg 进程已退出")
                 return None
 
-            # 每次读取 <=200ms 对应的字节
+            # 每次读取 <=200ms 对应的字节; read1 不等待填满缓冲, 避免阻塞读挂死
             read_bytes = min(self.sample_rate // 5 * 2, bytes_needed - len(accumulated))
-            data = self._ffmpeg_proc.stdout.read(read_bytes)
+            try:
+                data = self._ffmpeg_proc.stdout.read1(read_bytes)
+            except (ValueError, OSError):
+                # stdout 被 close() 关闭(stop 触发), 视为正常结束
+                return None
             if not data:
-                time.sleep(0.01)
+                # 已到 EOF 或 stdout 被外部关闭(stop), 等待一小段后由 stop_event 退出
+                if self._ffmpeg_proc.poll() is not None or self.stop_event.is_set():
+                    break
+                time.sleep(0.05)
                 continue
             accumulated.extend(data)
 
@@ -439,7 +442,7 @@ class AudioCapture:
         # s16le -> float32 mono
         wave = np.frombuffer(accumulated, dtype=np.int16).astype(np.float32) / 32768.0
 
-        timestamp = self._base_timestamp + self._total_read_sec
+        timestamp = self._total_read_sec
         self._total_read_sec += len(wave) / self.sample_rate
         duration = len(wave) / self.sample_rate
 
@@ -471,7 +474,7 @@ class AudioCapture:
         # 归一化: float32 mono + 目标采样率
         wave = _to_float32_mono(data, src_sr, self.sample_rate)
 
-        timestamp = self._base_timestamp + self._total_read_sec
+        timestamp = self._total_read_sec
         self._total_read_sec += len(wave) / self.sample_rate
         duration = len(wave) / self.sample_rate
 

@@ -274,16 +274,21 @@ export default function AudioMonitor({
   }
 
   // ── 切换视频源收音 ──
-  const toggleVideoMode = () => {
+  const toggleVideoMode = async () => {
     if (monitorMode === 'video') {
       setMonitorMode('idle')
-      // 不停后端监控，只停止音频
+      // 不停后端监控，只切回界面
     } else {
       if (!isRunning) {
-        // 启动后端监控 (带音频) — 直接传值避免 React state 批量更新延迟
-        startMonitor({ stayOnTab: true, audioSource: 'video_source' })
+        const ok = await startMonitor({ stayOnTab: true, audioSource: 'video_source' })
+        if (ok) setMonitorMode('video')
+      } else if (!pipelineAudio?.enabled) {
+        await stopMonitor({ stayOnTab: true })
+        const ok = await startMonitor({ stayOnTab: true, audioSource: 'video_source' })
+        if (ok) setMonitorMode('video')
+      } else {
+        setMonitorMode('video')
       }
-      setMonitorMode('video')
     }
   }
 

@@ -246,15 +246,16 @@ class FallRiskMonitor:
     def stop(self):
         """停止监控"""
         self._stop_flag.set()
+        # 先关闭采集器(解除ffmpeg阻塞读), 再 join 线程, 避免 stop 卡满超时
+        if self.audio_capture:
+            self.audio_capture.close()
+            self.audio_capture = None
         if self._thread:
             self._thread.join(timeout=5)
         if self._audio_thread:
             self._audio_thread.join(timeout=5)
             self._audio_thread = None
         self.status.is_running = False
-        if self.audio_capture:
-            self.audio_capture.close()
-            self.audio_capture = None
         if self.video_capture:
             self.video_capture.close()
             self.video_capture = None

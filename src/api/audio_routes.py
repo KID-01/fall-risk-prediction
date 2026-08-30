@@ -63,12 +63,19 @@ async def audio_status() -> dict[str, Any]:
 
 
 @audio_router.post("/analyze")
-async def analyze_audio(file: UploadFile, timestamp: float = 0.0) -> dict[str, Any]:
+async def analyze_audio(
+    file: UploadFile,
+    timestamp: float = 0.0,
+    person_id: str = "default",
+    device_id: str = "default",
+) -> dict[str, Any]:
     """分析上传的音频文件, 返回声音事件与全局 top-k 标签
 
     Args:
         file: multipart 音频文件 (.wav/.flac/.ogg)
-        timestamp: 音频起始时间戳(秒), 默认为 0
+timestamp: 音频起始时间戳(秒), 默认为 0
+        person_id: 人员ID (默认 "default", 用于入库归属)
+        device_id: 设备ID (默认 "default", 用于入库归属)
     """
     analyzer = get_analyzer()
     if not analyzer.enabled:
@@ -109,7 +116,7 @@ async def analyze_audio(file: UploadFile, timestamp: float = 0.0) -> dict[str, A
     if result.events:
         try:
             db = Database()
-            db.insert_audio_events(result.events)
+            db.insert_audio_events(result.events, person_id=person_id, device_id=device_id)
         except Exception as exc:
             log.warning(f"音频事件持久化失败: {exc}")
 

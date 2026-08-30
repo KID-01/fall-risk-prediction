@@ -531,11 +531,11 @@ export default function App() {
       if (sourceMode === 'ezviz') {
         if (!selectedDevice) {
           setControlError('请先选择萤石设备')
-          return
+          return false
         }
         if (!selectedDevice.online) {
           setControlError('所选设备当前离线')
-          return
+          return false
         }
         response = await fetch(`${API_BASE}/ezviz/monitor/start`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -549,7 +549,7 @@ export default function App() {
       } else {
         if (!source.trim()) {
           setControlError('请输入本地文件、RTMP 或 RTSP 视频源地址')
-          return
+          return false
         }
         localStorage.setItem('monitor_source', source)
         response = await fetch(`${API_BASE}/stream/start`, {
@@ -560,33 +560,37 @@ export default function App() {
 
       if (!response.ok) {
         setControlError(await readError(response))
-        return
+        return false
       }
       if (sourceMode === 'ezviz') setPlayerConfig(await response.json())
       else setPlayerConfig(null)
       if (!stayOnTab && videoTab !== 'analysis') setVideoTab('analysis')
-      fetchStatus()
+      await fetchStatus()
+      return true
     } catch (_) {
       setControlError('无法连接后端服务，请确认 FastAPI 已启动')
+      return false
     }
   }
-  const stopMonitor = async () => {
+  const stopMonitor = async ({ stayOnTab } = {}) => {
     try {
       const response = await fetch(`${API_BASE}/stream/stop`, { method: 'POST' })
       if (!response.ok) {
         setControlError(await readError(response))
-        return
+        return false
       }
       setPlayerConfig(null)
       setRawPlayerLoaded(false)
       setPlayerError('')
       setPlayerState('idle')
-      setVideoTab('analysis')
+      if (!stayOnTab) setVideoTab('analysis')
       setDeveloperVideoName('')
       setDeveloperVideoActive(false)
-      fetchStatus()
+      await fetchStatus()
+      return true
     } catch (_) {
       setControlError('无法连接后端服务，请确认 FastAPI 已启动')
+      return false
     }
   }
   const uploadDeveloperVideo = async event => {
