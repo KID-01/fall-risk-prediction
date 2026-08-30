@@ -914,6 +914,10 @@ export default function App() {
                 </div>
                 <div className="environment-risk-summary">
                   <div className="environment-risk-metric">
+                    <span>人体风险</span>
+                    <b className={riskScoreClass(status.risk_extensions?.human_risk_state)}>{formatRiskScore(status.risk_extensions?.human_risk_index)}</b>
+                  </div>
+                  <div className="environment-risk-metric">
                     <span>综合环境风险</span>
                     <b className={riskScoreClass(status.environment?.state)}>{formatRiskScore(status.environment?.risk_index)}</b>
                   </div>
@@ -921,6 +925,12 @@ export default function App() {
                     <span>交互风险</span>
                     <b className={riskScoreClass(status.interaction?.state)}>{formatRiskScore(status.interaction?.risk_index)}</b>
                   </div>
+                </div>
+                <div className="environment-reason-list">
+                  {(status.fusion?.reason_codes || []).slice(0, 3).map(reason => <span key={reason}>{reason}</span>)}
+                  {status.interaction?.intersections?.slice(0, 2).map((item, index) => (
+                    <span key={`${item.class}-${index}`}>路径接近 {OBJECT_LABELS[item.class] || item.class} · 重叠 {Math.round((item.path_overlap_ratio || 0) * 100)}% · {item.time_to_interaction_s == null ? '--' : `${item.time_to_interaction_s.toFixed(1)}s`}</span>
+                  ))}
                 </div>
                 <h3>环境检测</h3>
                 <div className="environment-extension-grid">
