@@ -46,6 +46,29 @@ class AudioChunk:
 # ============================================================
 # 内部工具
 # ============================================================
+def _resolve_ffmpeg_path(explicit: str = "") -> str:
+    """解析 ffmpeg 可执行文件路径: 显式指定 > PATH > 常见安装位置 > 兜底
+
+    PATH 中找不到时 (如 Windows Scoop 未加入 PATH), 尝试常见安装目录,
+    避免 ffmpeg 明明装了却因 which() 查不到而拒绝打开网络流。
+    """
+    if explicit:
+        return explicit
+    found = which("ffmpeg")
+    if found:
+        return found
+    candidates = [
+        str(Path.home() / "scoop/apps/ffmpeg/current/bin/ffmpeg.exe"),
+        str(Path.home() / "scoop/shims/ffmpeg.exe"),
+        "/usr/local/bin/ffmpeg",
+        "/opt/homebrew/bin/ffmpeg",
+    ]
+    for cand in candidates:
+        if os.path.isfile(cand):
+            return cand
+    return "ffmpeg"
+
+
 def _resample_to_target(wave: np.ndarray, src_sr: int, target_sr: int) -> np.ndarray:
     """重采样到目标采样率 (使用 librosa, 已在依赖中)"""
     if src_sr == target_sr:
@@ -122,7 +145,7 @@ class AudioCapture:
         self.sample_rate = sample_rate
         self.chunk_seconds = chunk_seconds
         self.input_device = input_device
-        self.ffmpeg_path = ffmpeg_path or which("ffmpeg") or "ffmpeg"
+        self.ffmpeg_path = _resolve_ffmpeg_path(ffmpeg_path)
         self.stop_event = stop_event or threading.Event()
 
         # 内部状态
