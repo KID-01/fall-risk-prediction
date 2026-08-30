@@ -24,6 +24,7 @@ from src.inference.audio_analyzer import AudioAnalysisResult, AudioAnalyzer, Aud
 from src.inference.baseline import BaselineManager
 from src.inference.deviation import DeviationDetector, DeviationResult
 from src.inference.features import FeatureCalculator, FeatureVector
+from src.inference.post_impact import PostImpactDetector, PostImpactResult
 from src.inference.visual_risk import (
     CausalTrajectoryProvider,
     EngineeringRiskFusion,
@@ -93,6 +94,7 @@ class MonitorStatus:
     environment_state: str = "UNKNOWN"
     top_hazards: list = field(default_factory=list)
     risk_extensions: dict = field(default_factory=dict)
+    post_impact: PostImpactResult | None = None
     fusion: FusionDecision | None = None
     current_risk_score: float = 0.0
     current_risk_message: str = "等待视觉风险数据"
@@ -150,6 +152,7 @@ class FallRiskMonitor:
             upgrade_confirmations=int(engineering_config.upgrade_confirmations),
             downgrade_confirmations=int(engineering_config.downgrade_confirmations),
         )
+        self.post_impact_detector = PostImpactDetector(dict(self.config.get("post_impact", {})))
         self._last_risk_record_time = 0.0
         self._last_emitted_alert_time = 0.0
         self._last_emitted_alert_level = RiskLevel.LOW
@@ -188,6 +191,7 @@ class FallRiskMonitor:
             "motion_risk_tracker",
             "trajectory_provider",
             "engineering_fusion",
+            "post_impact_detector",
         ):
             component = getattr(self, component_name, None)
             if component is not None:
@@ -350,6 +354,7 @@ class FallRiskMonitor:
                     self.status.motion_score = self.motion_risk_tracker.update(
                         video_frame.timestamp, primary_person
                     )
+                    self.status.post_impact = self.post_impact_detector.update(primary_person)
 
                     lighting = compute_lighting_risk(
                         video_frame.frame, dict(self.config.risk_extensions.lighting)
@@ -455,6 +460,11 @@ class FallRiskMonitor:
                         "trajectory": trajectory,
                         "wet_floor": wet_floor,
                         "interaction": interaction,
+                        "post_impact": (
+                            self.status.post_impact.to_dict()
+                            if self.status.post_impact
+                            else None
+                        ),
                     }
 
                     new_deviation: DeviationResult | None = None
@@ -545,10 +555,15 @@ class FallRiskMonitor:
                             or (motion_index is not None and motion_index >= 70)
                         ),
                     )
+                    self._apply_post_impact_override(decision)
                     self.status.fusion = decision
                     self.status.current_risk_score = decision.overall_score
                     self.status.current_risk_level = RiskLevel(decision.overall_level)
                     self.status.current_risk_message = self._risk_message(decision)
+                    if self.status.post_impact is not None and self.status.post_impact.confirmed:
+                        self.status.current_risk_message = (
+                            "已跌倒（FALL）：检测到人体倒地且持续不活动，请立即确认现场情况"
+                        )
                     self.status.risk_extensions["overall_engineering_state_v0_3"] = decision.overall_level.upper()
                     if self.status.current_risk_level == RiskLevel.LOW:
                         self._last_emitted_alert_level = RiskLevel.LOW
@@ -672,6 +687,23 @@ class FallRiskMonitor:
         other_x, other_y = matched.center
         center_distance = ((center_x - other_x) ** 2 + (center_y - other_y) ** 2) ** 0.5
         return overlap >= 0.15 or center_distance <= 0.7 * max(primary.height, 1.0)
+
+    def _apply_post_impact_override(self, decision: FusionDecision) -> None:
+        """FALL 已确认时强制整体风险为 CRITICAL。
+
+        注入原因码使告警签名变化，复用现有 _should_emit_alert 在上升沿
+        发出一次告警；持续期间按 alert_reminder_seconds 周期提醒。
+        """
+        result = self.status.post_impact
+        if result is None or not result.confirmed:
+            return
+        decision.overall_level = "critical"
+        decision.overall_score = max(decision.overall_score, 92.0)
+        decision.pending_direction = None
+        decision.pending_count = 0
+        decision.pending_required = 0
+        if "post_impact_fall_confirmed" not in decision.reason_codes:
+            decision.reason_codes.append("post_impact_fall_confirmed")
 
     def _risk_message(self, decision: FusionDecision) -> str:
         if decision.pending_direction == "upgrade":
@@ -947,6 +979,9 @@ class FallRiskMonitor:
                 },
             },
             "risk_extensions": extensions,
+            "post_impact": (
+                self.status.post_impact.to_dict() if self.status.post_impact else None
+            ),
             "reason_codes": fusion.reason_codes if fusion else [],
             "top_hazards": self.status.top_hazards,
             "low_light": {

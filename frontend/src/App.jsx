@@ -6,6 +6,7 @@ import { Shield, Moon, Sun, RefreshCw, Play, Square, RotateCcw, AlertTriangle, M
 
 const API_BASE = '/api/v1'
 const LEVEL_LABELS = { low: '低风险', attention: '关注级', warning: '预警级', critical: '高危级' }
+const LEVEL_ORDER = { low: 0, attention: 1, warning: 2, critical: 3 }
 const MAX_VIDEO_ASPECT_RATIO = 16 / 9
 const MIN_VIDEO_ASPECT_RATIO = 3 / 4
 const OBJECT_LABELS = {
@@ -16,6 +17,30 @@ const OBJECT_LABELS = {
 async function readError(response) {
   const payload = await response.json().catch(() => ({}))
   return payload.detail || payload.message || `请求失败（${response.status}）`
+}
+
+// FALL 确认上升沿的双音提醒（浏览器限制自动播放时静默失败）
+function playFallAlertTone() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const now = ctx.currentTime
+    ;[0, 0.35].forEach((offset, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = i === 0 ? 880 : 660
+      gain.gain.setValueAtTime(0.0001, now + offset)
+      gain.gain.exponentialRampToValueAtTime(0.3, now + offset + 0.05)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.3)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now + offset)
+      osc.stop(now + offset + 0.32)
+    })
+    setTimeout(() => ctx.close().catch(() => {}), 1500)
+  } catch (err) { /* 无音频权限时忽略 */ }
 }
 
 // 从 CSS 变量读取颜色（双主题自适应）
@@ -705,6 +730,46 @@ export default function App() {
   const level = status.current_risk_level || 'low'
   const levelLabel = LEVEL_LABELS[level] || '低风险'
 
+  // 跌倒后确认状态：FALL 已确认 > 确认中 > 恢复观察，仅在高于常规等级时覆盖大卡片
+  const postImpact = status.post_impact
+  const postImpactPhase = postImpact?.phase || 'NORMAL'
+  const fallConfirmed = postImpact?.confirmed === true
+  let heroLevel = level
+  let heroLabel = levelLabel
+  if (fallConfirmed) {
+    heroLevel = 'critical'
+    heroLabel = '已跌倒（FALL）'
+  } else if (postImpactPhase === 'FALL_CANDIDATE' && LEVEL_ORDER[level] < LEVEL_ORDER.warning) {
+    heroLevel = 'warning'
+    heroLabel = '正在确认倒地'
+  } else if (postImpactPhase === 'RECOVERY' && LEVEL_ORDER[level] < LEVEL_ORDER.attention) {
+    heroLevel = 'attention'
+    heroLabel = '恢复观察'
+  }
+  const heroMessage = fallConfirmed
+    ? (status.current_risk_message || '已跌倒（FALL）：检测到人体倒地且持续不活动，请立即确认现场情况')
+    : postImpactPhase === 'FALL_CANDIDATE' && heroLevel === 'warning'
+      ? '检测到疑似倒地姿态，正在确认（需连续帧满足几何条件）…'
+      : postImpactPhase === 'RECOVERY' && heroLevel === 'attention'
+        ? '倒地后恢复中，系统持续观察…'
+        : (status.current_risk_message || status.last_alert?.message || '系统运行正常，持续监测中')
+
+  // FALL 确认上升沿：播放声音提醒 + 打开弹窗警告；恢复时自动关闭
+  const [fallModalOpen, setFallModalOpen] = useState(false)
+  const [fallDetectedAt, setFallDetectedAt] = useState(null)
+  const fallAlertRef = useRef(false)
+  useEffect(() => {
+    const confirmed = status.post_impact?.confirmed === true
+    if (confirmed && !fallAlertRef.current) {
+      playFallAlertTone()
+      setFallDetectedAt(Date.now())
+      setFallModalOpen(true)
+    } else if (!confirmed && fallAlertRef.current) {
+      setFallModalOpen(false)
+    }
+    fallAlertRef.current = confirmed
+  }, [status.post_impact?.confirmed])
+
   // 视频徽标状态
   const videoBadgeState = videoTab === 'raw'
     ? (playerState === 'playing' ? { dot: 'online', text: '正在播放', live: true }
@@ -1058,14 +1123,14 @@ export default function App() {
       </section>
 
       {/* ── 风险等级大卡片 ── */}
-      <section className={`risk-hero risk-${level}`} aria-label="当前风险状态">
+      <section className={`risk-hero risk-${heroLevel}`} aria-label="当前风险状态">
         <div className="risk-hero-main">
           <div className="risk-level">
             <span className="risk-dot" />
-            <span className="risk-level-label">{levelLabel}</span>
+            <span className="risk-level-label">{heroLabel}</span>
           </div>
           <div className="risk-message">
-            {status.current_risk_message || status.last_alert?.message || '系统运行正常，持续监测中'}
+            {heroMessage}
           </div>
         </div>
         <div className="risk-meta">
@@ -1147,6 +1212,27 @@ export default function App() {
           </div>
         )}
       </section>
+
+      {/* ── FALL 确认弹窗警告 ── */}
+      {fallModalOpen && fallConfirmed && (
+        <div className="fall-modal-overlay" role="alertdialog" aria-modal="true" aria-label="跌倒确认警告">
+          <div className="fall-modal">
+            <div className="fall-modal-icon"><AlertTriangle size={34} /></div>
+            <div className="fall-modal-title">已跌倒（FALL）</div>
+            <div className="fall-modal-message">
+              检测到人体倒地且持续不活动，请立即确认现场情况。
+            </div>
+            <div className="fall-modal-foot">
+              <span className="fall-modal-time mono">
+                {fallDetectedAt ? new Date(fallDetectedAt).toLocaleString('zh-CN') : ''}
+              </span>
+              <button type="button" className="fall-modal-ack" onClick={() => setFallModalOpen(false)}>
+                已知晓，关闭警告
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 页脚 ── */}
       <footer className="app-footer">

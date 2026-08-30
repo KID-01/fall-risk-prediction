@@ -114,6 +114,15 @@ engineering_risk:
   alert_reminder_seconds: 60
   persistence_interval_seconds: 1.0
 
+# ── 跌倒后确认状态机（post-impact，工程启发非科学调参）──
+post_impact:
+  horiz_aspect_thr: 1.6     # 人体框宽/高超过此值 -> 疑似横卧
+  low_height_ratio: 0.55    # 高度降至站立参考的此比例以下 -> 疑似塌陷
+  sustain_frames: 6         # 滑窗内满足的帧数达到后确认（约 0.2s）
+  history_frames: 8
+  missing_hold_frames: 30   # 已确认后丢框保持告警的最大帧数
+  candidate_missing_hold: 12  # 候选期容忍连续丢帧的上限（检测器横卧间歇丢失）
+
 # ── 关键点索引定义 (MediaPipe Pose 33点) ──
 keypoints:
   nose: 0

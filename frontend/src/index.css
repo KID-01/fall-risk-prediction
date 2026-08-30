@@ -777,6 +777,86 @@ svg { display: inline-block; vertical-align: middle; }
 .risk-hero.risk-critical .risk-level-label { color: var(--fr-risk-critical); }
 .risk-hero.risk-critical { animation: fr-rise 0.8s cubic-bezier(0.22, 0.61, 0.36, 1) both, fr-pulse-border 2s infinite; }
 
+/* ── FALL 确认弹窗警告 ── */
+.fall-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--fr-risk-critical) 18%, rgba(0, 0, 0, 0.45));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fr-modal-fade 0.25s ease both;
+}
+.fall-modal {
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 34px 30px 26px;
+  border-radius: var(--fr-radius-xl);
+  border: 1px solid color-mix(in srgb, var(--fr-risk-critical) 45%, transparent);
+  border-top: 5px solid var(--fr-risk-critical);
+  background: var(--fr-card);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+  text-align: center;
+  animation: fr-rise 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.fall-modal-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--fr-risk-critical-soft);
+  color: var(--fr-risk-critical);
+  animation: fr-pulse-border 2s infinite;
+}
+.fall-modal-title {
+  font-family: var(--fr-font-serif);
+  font-size: clamp(26px, 4vw, 32px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--fr-risk-critical);
+}
+.fall-modal-message { font-size: 15px; line-height: 1.6; color: var(--fr-foreground); }
+.fall-modal-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--fr-border);
+}
+.fall-modal-time { font-size: 12px; color: var(--fr-muted-foreground); }
+.fall-modal-ack {
+  width: 100%;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: var(--fr-radius-sm);
+  background: var(--fr-risk-critical);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: filter var(--fr-transition), transform var(--fr-transition);
+}
+.fall-modal-ack:hover { filter: brightness(1.08); }
+.fall-modal-ack:active { transform: scale(0.985); }
+@keyframes fr-modal-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .fall-modal-overlay, .fall-modal { animation: none; }
+  .fall-modal-icon { animation: none; }
+}
+
 /* ── 图表网格 ── */
 .chart-grid {
   display: grid;
