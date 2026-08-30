@@ -54,6 +54,8 @@ class WechatCloudFunctionAdapter:
         risk_level: str,
         risk_score: float,
         person_id: str = "default",
+        location: str | None = None,
+        alert_time: str | None = None,
     ) -> dict:
         if not self.enabled:
             return {"enabled": False, "status": "not_configured"}
@@ -65,6 +67,15 @@ class WechatCloudFunctionAdapter:
             "risk_score": round(float(risk_score), 2),
             "isRead": False,
         }
+        if self.payload_mode in {"hybrid", "flat"}:
+            # 小程序交接契约要求标准时间、老人/设备标识；location 无法由当前
+            # 视频源可靠推断时留空，由云函数/小程序按需展示。
+            data.update({
+                "elderId": person_id,
+                "alertTime": alert_time or time.strftime("%Y-%m-%d %H:%M:%S"),
+            })
+            if location:
+                data["location"] = location
         body = {
             "action": "push",
             "data": data,
@@ -233,6 +244,7 @@ class NotificationService:
                 risk_level=level,
                 risk_score=risk_score,
                 person_id=person_id,
+                alert_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
             if level != RiskLevel.LOW.value
             else {"enabled": False, "status": "not_applicable", "reason": "low_local_only"}
