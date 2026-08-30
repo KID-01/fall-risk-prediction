@@ -507,6 +507,19 @@ svg { display: inline-block; vertical-align: middle; }
   margin: 0 auto;
   padding: 24px 28px 48px;
   min-height: 100vh;
+  /* Keep the dashboard within the viewport; overflow is browsed with the wheel. */
+  max-height: 100vh;
+  overflow-y: auto;
+  overflow-x: clip;
+  scrollbar-width: thin;
+  scrollbar-color: var(--fr-input-border) transparent;
+}
+
+.dashboard::-webkit-scrollbar { width: 8px; }
+.dashboard::-webkit-scrollbar-track { background: transparent; }
+.dashboard::-webkit-scrollbar-thumb {
+  background: var(--fr-input-border);
+  border-radius: 999px;
 }
 
 /* ── 分层入场动效 ── */
