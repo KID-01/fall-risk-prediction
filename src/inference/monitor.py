@@ -69,6 +69,7 @@ class MonitorStatus:
     recent_keypoints: list[KeypointFrame] = field(default_factory=list)
     audio_enabled: bool = False
     audio_source: str = ""
+    audio_source_requested: str = ""
     last_audio_result: AudioAnalysisResult | None = None
     audio_chunks_processed: int = 0
     audio_error: str | None = None
@@ -102,6 +103,7 @@ class MonitorStatus:
     base_risk_message: str = "人体基线风险正常"
     _pending_audio_events: list[AudioEvent] = field(default_factory=list)
     _audio_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _last_audio_drain: float = 0.0
 
 
 class FallRiskMonitor:
@@ -226,6 +228,7 @@ class FallRiskMonitor:
             temporary_source_path=temporary_source_path,
             audio_enabled=audio_enabled,
             audio_source=effective_audio_source if audio_enabled else "",
+            audio_source_requested=audio_source or cfg_audio_source,
         )
         self._stop_flag.clear()
 
@@ -496,6 +499,8 @@ class FallRiskMonitor:
                     with self.status._audio_lock:
                         pending_events = list(self.status._pending_audio_events)
                         self.status._pending_audio_events.clear()
+                        if pending_events:
+                            self.status._last_audio_drain = now
 
                     if new_deviation is not None or pending_events or now - _last_base_evaluation >= 1:
                         base_alert = self.alert_engine.evaluate(
@@ -827,9 +832,11 @@ class FallRiskMonitor:
                             with self.status._audio_lock:
                                 self.status._pending_audio_events.extend(result.events)
                                 if len(self.status._pending_audio_events) > 100:
-                                    dropped = len(self.status._pending_audio_events) - 100
-                                    log.warning("音频事件队列超出上限, 丢弃 %d 条", dropped)
-                                    self.status._pending_audio_events = self.status._pending_audio_events[-100:]
+                                    self._flush_stalled_audio_events(person_id, device_id)
+                                    if len(self.status._pending_audio_events) > 100:
+                                        dropped = len(self.status._pending_audio_events) - 100
+                                        log.warning("音频事件队列超出上限, 丢弃 %d 条", dropped)
+                                        self.status._pending_audio_events = self.status._pending_audio_events[-100:]
 
                             try:
                                 db = Database()
@@ -848,6 +855,62 @@ class FallRiskMonitor:
         except Exception as e:
             self.status.audio_error = str(e)
             log.error(f"音频采集线程异常: {e}")
+
+    def _flush_stalled_audio_events(self, person_id: str, device_id: str) -> None:
+        """视频停滞时兜底评估积压音频事件, 防静默丢弃; 调用方需已持有 _audio_lock。"""
+        if not self.status._pending_audio_events:
+            return
+        now = time.time()
+        if now - self.status._last_audio_drain < 30.0:
+            return
+        pending = list(self.status._pending_audio_events)
+        self.status._pending_audio_events.clear()
+        try:
+            alert = self.alert_engine.evaluate(
+                self.status.last_deviation or DeviationResult(),
+                timestamp=now,
+                has_activity=False,
+                audio_events=pending,
+                emit=True,
+            )
+            self.status.last_alert = alert
+            try:
+                db = Database()
+                alert_id = db.insert_alert_event(
+                    alert_level=alert.level.value,
+                    message=alert.message,
+                    risk_score=float(alert.level.priority) * 100.0 / 3.0,
+                    person_id=person_id,
+                    device_id=device_id,
+                )
+                self.status.last_notification = self.notification_service.dispatch(
+                    alert,
+                    alert_id=alert_id,
+                    risk_score=float(alert.level.priority) * 100.0 / 3.0,
+                    person_id=person_id,
+                    device_id=device_id,
+                    reason_codes=["audio_stall_fallback"],
+                )
+            except Exception as exc:
+                log.error(f"音频停滞兜底持久化/通知失败: {exc}")
+            manager.broadcast_threadsafe(
+                {
+                    "type": "alert",
+                    "level": alert.level.value,
+                    "score": float(alert.level.priority) * 100.0 / 3.0,
+                    "message": alert.message,
+                    "reason_codes": ["audio_stall_fallback"],
+                    "notification_id": (
+                        self.status.last_notification.get("notification_id")
+                        if self.status.last_notification
+                        else None
+                    ),
+                }
+            )
+            log.warning("视频停滞, 音频兜底评估 %d 个事件 -> %s", len(pending), alert.level.value)
+        except Exception as exc:
+            log.error(f"音频停滞兜底评估失败: {exc}")
+            self.status._pending_audio_events = pending + self.status._pending_audio_events
 
     def get_status(self) -> dict:
         """获取监控状态"""
@@ -915,6 +978,7 @@ class FallRiskMonitor:
             "last_notification": self.status.last_notification,
             "audio_enabled": self.status.audio_enabled,
             "audio_source": self.status.audio_source,
+            "audio_source_requested": self.status.audio_source_requested,
             "audio_chunks_processed": self.status.audio_chunks_processed,
             "audio_error": self.status.audio_error,
             "person": {

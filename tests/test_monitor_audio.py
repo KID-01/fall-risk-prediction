@@ -384,3 +384,107 @@ class TestMonitorStartRequestAudioField:
 
         req = MonitorStartRequest(source="0", audio_source="mic")
         assert req.audio_source == "mic"
+
+
+# ── 音频衔接: audio_source_requested 上报 ──
+
+
+class TestAudioSourceRequested:
+    """start() 应分别记录用户请求的 audio_source 与实际生效的 audio_source"""
+
+    @patch.object(FallRiskMonitor, "__new__", lambda cls: object.__new__(cls))
+    def _make(self):
+        m = FallRiskMonitor.__new__(FallRiskMonitor)
+        m._initialized = False
+        m.config = MagicMock()
+        m.config.get.return_value = {"source": "off", "enabled": True}
+        m.config.audio.sample_rate = 32000
+        m.config.audio.chunk_seconds = 10
+        m.config.audio.get.return_value = ""
+        m.config.pose_estimation = {"backend": "mediapipe"}
+        m.status = MonitorStatus()
+        m._stop_flag = threading.Event()
+        m._keypoint_buffer = []
+        m._buffer_window = 30
+        m._thread = None
+        m._audio_thread = None
+        m.audio_analyzer = None
+        m.audio_capture = None
+        m.video_capture = None
+        m.human_detector = MagicMock()
+        m.keypoint_extractor = MagicMock()
+        m.frame_filter = MagicMock()
+        m.feature_calculator = MagicMock()
+        m.baseline_manager = MagicMock()
+        m.deviation_detector = MagicMock()
+        m.alert_engine = MagicMock()
+        return m
+
+    @patch("src.inference.monitor.AudioCapture")
+    @patch("src.inference.monitor.AudioAnalyzer")
+    @patch("src.inference.monitor.threading.Thread")
+    def test_requested_tracked_separately_from_actual(self, mock_thread, mock_analyzer, mock_cap):
+        m = self._make()
+        mock_thread.return_value = MagicMock()
+        # 非 rtsp 源请求 video_source -> 实际降级为 off, 但 requested 保留用户意图
+        m.start(source="local/file.mp4", audio_source="video_source")
+        assert m.status.audio_source_requested == "video_source"
+        assert m.status.audio_enabled is False
+        assert m.status.audio_source == ""
+
+    @patch("src.inference.monitor.AudioCapture")
+    @patch("src.inference.monitor.AudioAnalyzer")
+    @patch("src.inference.monitor.threading.Thread")
+    def test_get_status_exposes_requested(self, mock_thread, mock_analyzer, mock_cap):
+        m = self._make()
+        mock_thread.return_value = MagicMock()
+        m.start(source="0", audio_source="mic")
+        d = m.get_status()
+        assert d["audio_source_requested"] == "mic"
+        assert d["audio_source"] == "mic"
+
+
+# ── 视频停滞时音频兜底 ──
+
+
+class TestFlushStalledAudio:
+    """视频主循环停滞时 _flush_stalled_audio_events 应兜底评估积压音频事件"""
+
+    def _make(self):
+        m = object.__new__(FallRiskMonitor)
+        m.status = MonitorStatus()
+        m.alert_engine = MagicMock()
+        m.notification_service = MagicMock()
+        m.alert_engine.evaluate.return_value = MagicMock(
+            level=RiskLevel.CRITICAL, message="impact", priority=3
+        )
+        return m
+
+    def test_flushes_when_stalled(self):
+        import time as _t
+
+        m = self._make()
+        m.status._last_audio_drain = _t.time() - 60.0
+        m.status._pending_audio_events.append(
+            AudioEvent(category=SoundCategory.IMPACT, label="fall", class_index=1, score=0.9, timestamp=1.0)
+        )
+        m._flush_stalled_audio_events("p", "d")
+        m.alert_engine.evaluate.assert_called_once()
+        assert m.status._pending_audio_events == []
+
+    def test_skips_when_recently_drained(self):
+        import time as _t
+
+        m = self._make()
+        m.status._last_audio_drain = _t.time()
+        m.status._pending_audio_events.append(
+            AudioEvent(category=SoundCategory.IMPACT, label="fall", class_index=1, score=0.9, timestamp=1.0)
+        )
+        m._flush_stalled_audio_events("p", "d")
+        m.alert_engine.evaluate.assert_not_called()
+
+    def test_noop_on_empty(self):
+        m = self._make()
+        m.status._last_audio_drain = 0.0
+        m._flush_stalled_audio_events("p", "d")
+        m.alert_engine.evaluate.assert_not_called()
