@@ -93,7 +93,10 @@ class TestAudioCaptureFileBackend:
 
         for i, chunk in enumerate(chunks):
             assert chunk.duration_sec == pytest.approx(chunk_seconds, abs=0.1)
-            assert chunk.timestamp == pytest.approx(i * chunk_seconds, abs=0.1)
+            # 时间戳为相对迭代起点的墙钟偏移, 非负且单调不减
+            assert chunk.timestamp >= 0
+            if i > 0:
+                assert chunk.timestamp >= chunks[i - 1].timestamp
             assert chunk.sample_rate == 32000
             assert chunk.waveform.dtype == np.float32
             assert chunk.waveform.ndim == 1  # 单声道

@@ -154,7 +154,8 @@ class AudioCapture:
         self._ffmpeg_proc: subprocess.Popen | None = None
         self._mic_stream = None
         self._is_open = False
-        self._total_read_sec = 0.0
+        # 采集会话起点墙钟, chunk 时间戳 = time.time() - _start_wall
+        self._start_wall = 0.0
 
     # ========================================================
     # 公共接口
@@ -192,6 +193,9 @@ class AudioCapture:
         if self.stop_event.is_set():
             return None
 
+        if self._start_wall == 0.0:
+            self._start_wall = time.time()
+
         # 根据源类型分发
         if self.source.lower() == "mic":
             return self._read_mic_chunk()
@@ -208,7 +212,8 @@ class AudioCapture:
             if not self.open():
                 raise RuntimeError(f"无法打开音频源: {self.source}")
 
-        self._total_read_sec = 0.0
+        # 每次迭代会话从当前墙钟起算, 与 video_capture 首帧基准语义一致
+        self._start_wall = time.time()
 
         try:
             while not self.stop_event.is_set():
@@ -273,6 +278,12 @@ class AudioCapture:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
         return False
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
     # ========================================================
     # 内部: 源打开
@@ -418,8 +429,7 @@ class AudioCapture:
         if wave.ndim == 2:
             wave = wave.mean(axis=1)
 
-        timestamp = self._total_read_sec
-        self._total_read_sec += accumulated_samples / self.sample_rate
+        timestamp = time.time() - self._start_wall
         duration = accumulated_samples / self.sample_rate
 
         return AudioChunk(
@@ -431,7 +441,8 @@ class AudioCapture:
 
     def _read_rtsp_chunk(self) -> AudioChunk | None:
         """从 ffmpeg stdout 读取一个 chunk (s16le -> float32)"""
-        if self._ffmpeg_proc is None or self._ffmpeg_proc.stdout is None:
+        proc = self._ffmpeg_proc
+        if proc is None or proc.stdout is None:
             return None
 
         target_samples = self.sample_rate * self.chunk_seconds
@@ -440,14 +451,14 @@ class AudioCapture:
         # 分片读取, 每次 <=200ms 检查 stop_event
         accumulated = bytearray()
         while len(accumulated) < bytes_needed and not self.stop_event.is_set():
-            if self._ffmpeg_proc.poll() is not None:
+            if proc.poll() is not None:
                 log.info("ffmpeg 进程已退出")
                 return None
 
             # 每次读取 <=200ms 对应的字节; read1 不等待填满缓冲, 避免阻塞读挂死
             read_bytes = min(self.sample_rate // 5 * 2, bytes_needed - len(accumulated))
             try:
-                data = self._ffmpeg_proc.stdout.read1(read_bytes)
+                data = proc.stdout.read1(read_bytes)
             except (ValueError, OSError):
                 # stdout 被 close() 关闭(stop 触发), 视为正常结束
                 return None
@@ -465,8 +476,7 @@ class AudioCapture:
         # s16le -> float32 mono
         wave = np.frombuffer(accumulated, dtype=np.int16).astype(np.float32) / 32768.0
 
-        timestamp = self._total_read_sec
-        self._total_read_sec += len(wave) / self.sample_rate
+        timestamp = time.time() - self._start_wall
         duration = len(wave) / self.sample_rate
 
         return AudioChunk(
@@ -497,8 +507,7 @@ class AudioCapture:
         # 归一化: float32 mono + 目标采样率
         wave = _to_float32_mono(data, src_sr, self.sample_rate)
 
-        timestamp = self._total_read_sec
-        self._total_read_sec += len(wave) / self.sample_rate
+        timestamp = time.time() - self._start_wall
         duration = len(wave) / self.sample_rate
 
         return AudioChunk(

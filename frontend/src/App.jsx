@@ -1085,9 +1085,7 @@ export default function App() {
                 chunksProcessed: status.audio_chunks_processed,
                 error: status.audio_error || (
                   audioSource === 'video_source' && status.is_running && !status.audio_enabled
-                    ? (audioStatus?.checkpoint_exists
-                      ? '视频源音频未启用，请停止监控后重新点击“视频源收音”'
-                      : 'PANNs 音频模型未安装，无法进行音频分析')
+                    ? '视频源音频未启用，请停止监控后重新点击“视频源收音”'
                     : ''
                 ),
                 lastResult: status.last_audio_result,

@@ -234,13 +234,13 @@ class FallRiskMonitor:
 
         if audio_enabled:
             self.audio_analyzer = AudioAnalyzer()
+            # 刻意不传 stop_event: 用内部独立 Event, 音频流结束不会误置全局 _stop_flag
             self.audio_capture = AudioCapture(
                 source=effective_audio_source,
                 sample_rate=int(self.config.audio.sample_rate),
                 chunk_seconds=int(self.config.audio.chunk_seconds),
                 input_device=self.config.audio.get("input_device"),
                 ffmpeg_path=str(self.config.audio.get("ffmpeg_path", "")),
-                stop_event=self._stop_flag,
             )
             self._audio_thread = threading.Thread(target=self._run_audio, daemon=True)
             self._audio_thread.start()
@@ -820,11 +820,15 @@ class FallRiskMonitor:
                         )
                         self.status.last_audio_result = result
                         self.status.audio_chunks_processed += 1
+                        # 分析成功则清除历史错误, 避免前端 banner 常亮
+                        self.status.audio_error = None
 
                         if result.events:
                             with self.status._audio_lock:
                                 self.status._pending_audio_events.extend(result.events)
                                 if len(self.status._pending_audio_events) > 100:
+                                    dropped = len(self.status._pending_audio_events) - 100
+                                    log.warning("音频事件队列超出上限, 丢弃 %d 条", dropped)
                                     self.status._pending_audio_events = self.status._pending_audio_events[-100:]
 
                             try:
@@ -833,6 +837,7 @@ class FallRiskMonitor:
                                     result.events,
                                     person_id=person_id,
                                     device_id=device_id,
+                                    epoch_base=self.audio_capture._start_wall,
                                 )
                             except Exception as e:
                                 log.error(f"音频事件持久化失败: {e}")
@@ -998,6 +1003,7 @@ class FallRiskMonitor:
                         {
                             "category": e.category.value,
                             "label": e.label,
+                            "class_index": e.class_index,
                             "score": e.score,
                             "timestamp": e.timestamp,
                         }

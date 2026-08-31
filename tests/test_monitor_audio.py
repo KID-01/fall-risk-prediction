@@ -4,6 +4,9 @@ from __future__ import annotations
 import threading
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+import soundfile as sf
+
 from src.alerts.engine import RiskLevel
 from src.inference.audio_analyzer import AudioAnalysisResult, AudioEvent, SoundCategory
 from src.inference.monitor import FallRiskMonitor, MonitorStatus
@@ -89,6 +92,8 @@ class TestMonitorStartStopAudio:
         assert m.status.audio_source == "mic"
         mock_analyzer.assert_called_once()
         mock_capture.assert_called_once()
+        # P1 回归: 不得把全局 _stop_flag 传入 AudioCapture, 否则音频流结束会连带停掉视频监控
+        assert mock_capture.call_args.kwargs.get("stop_event") is None
 
     def test_start_without_audio_skips(self):
         m = self._make()
@@ -118,6 +123,58 @@ class TestMonitorStartStopAudio:
         assert m._audio_thread is None
         mock_capture.close.assert_called_once()
         assert m.audio_capture is None
+
+
+# ── P1 回归: 音频流结束不连带停视频 ──
+
+
+class TestAudioStreamEndKeepsMonitorRunning:
+    """P1 回归: 音频流自然结束/异常不得置位全局 _stop_flag"""
+
+    def _write_tone(self, tmp_path, duration: float = 0.5, sample_rate: int = 16000) -> str:
+        t = np.arange(int(sample_rate * duration), dtype=np.float32) / sample_rate
+        wave = 0.1 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
+        path = tmp_path / "tone.wav"
+        sf.write(str(path), wave, sample_rate, subtype="PCM_16")
+        return str(path)
+
+    def test_file_stream_end_leaves_stop_flag_clear(self, tmp_path):
+        from src.data.audio_capture import AudioCapture
+
+        m = object.__new__(FallRiskMonitor)
+        m._stop_flag = threading.Event()
+        m.status = MonitorStatus()
+        m.audio_capture = AudioCapture(
+            source=self._write_tone(tmp_path), sample_rate=16000, chunk_seconds=2
+        )
+        m.audio_analyzer = MagicMock()
+        m.audio_analyzer.analyze_waveform.return_value = AudioAnalysisResult(
+            events=[], top_labels=[], duration_sec=0.5, elapsed_ms=10.0
+        )
+
+        m._run_audio()
+
+        # 文件读完 -> with 退出 -> close() -> 仅触发内部 stop_event, 全局 _stop_flag 不被置位
+        assert m._stop_flag.is_set() is False
+        assert m.status.audio_chunks_processed == 1
+
+    def test_audio_exception_leaves_stop_flag_clear(self, tmp_path):
+        from src.data.audio_capture import AudioCapture
+
+        m = object.__new__(FallRiskMonitor)
+        m._stop_flag = threading.Event()
+        m.status = MonitorStatus()
+        m.audio_capture = AudioCapture(
+            source=self._write_tone(tmp_path), sample_rate=16000, chunk_seconds=2
+        )
+        m.audio_analyzer = MagicMock()
+        m.audio_analyzer.analyze_waveform.side_effect = RuntimeError("模型推理失败")
+
+        m._run_audio()
+
+        # 分析异常只是记录 audio_error, 不置位全局 _stop_flag
+        assert m._stop_flag.is_set() is False
+        assert "模型推理失败" in (m.status.audio_error or "")
 
 
 # ── _run_audio 循环 ──

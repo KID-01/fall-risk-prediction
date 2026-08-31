@@ -8,6 +8,8 @@ POST /api/v1/audio/analyze  上传 wav/flac/ogg 音频, 返回声音事件与 to
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -28,6 +30,8 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".wav", ".flac", ".ogg"}
 
 _analyzer: AudioAnalyzer | None = None
+# 串行化 PANNs 推理, 见 audio_analyzer 模块文档 "需外部串行化"
+_INFERENCE_LOCK = threading.Lock()
 
 
 def get_analyzer() -> AudioAnalyzer:
@@ -73,7 +77,7 @@ async def analyze_audio(
 
     Args:
         file: multipart 音频文件 (.wav/.flac/.ogg)
-timestamp: 音频起始时间戳(秒), 默认为 0
+        timestamp: 音频起始时间戳(秒), 默认为 0
         person_id: 人员ID (默认 "default", 用于入库归属)
         device_id: 设备ID (默认 "default", 用于入库归属)
     """
@@ -104,11 +108,12 @@ timestamp: 音频起始时间戳(秒), 默认为 0
             status_code=400, detail="音频解码失败, 文件已损坏或格式不受支持"
         ) from exc
 
-    # 推理在独立线程执行, 避免 CPU 密集计算阻塞事件循环
+    # 推理在独立线程执行, 避免 CPU 密集计算阻塞事件循环; 线程内加锁串行化共享模型访问
     try:
-        result = await asyncio.to_thread(
-            analyzer.analyze_waveform, waveform, int(sample_rate), timestamp
-        )
+        with _INFERENCE_LOCK:
+            result = await asyncio.to_thread(
+                analyzer.analyze_waveform, waveform, int(sample_rate), timestamp
+            )
     except Exception as exc:
         log.warning(f"音频分析失败: {exc}")
         raise HTTPException(status_code=503, detail=f"音频分析失败: {exc}") from exc
@@ -116,7 +121,12 @@ timestamp: 音频起始时间戳(秒), 默认为 0
     if result.events:
         try:
             db = Database()
-            db.insert_audio_events(result.events, person_id=person_id, device_id=device_id)
+            db.insert_audio_events(
+                result.events,
+                person_id=person_id,
+                device_id=device_id,
+                epoch_base=time.time(),
+            )
         except Exception as exc:
             log.warning(f"音频事件持久化失败: {exc}")
 

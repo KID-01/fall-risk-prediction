@@ -554,12 +554,25 @@ class Database:
         events: list,
         person_id: str = "default",
         device_id: str = "default",
+        epoch_base: float | None = None,
     ) -> int:
-        """批量插入音频事件"""
+        """批量插入音频事件
+
+        events 携带的 timestamp 是相对某基准(会话起点/上传时刻)的秒数;
+        传入 epoch_base 后会转换为绝对 epoch 时间戳, 供 /audio/events 按时间窗过滤。
+        """
         if not events:
             return 0
         rows = [
-            (e.timestamp, device_id, person_id, e.category.value, e.label, e.class_index, e.score)
+            (
+                (epoch_base + e.timestamp) if epoch_base is not None else e.timestamp,
+                device_id,
+                person_id,
+                e.category.value,
+                e.label,
+                e.class_index,
+                e.score,
+            )
             for e in events
         ]
         with self._get_conn() as conn:

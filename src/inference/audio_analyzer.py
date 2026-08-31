@@ -207,6 +207,13 @@ class AudioAnalyzer:
             wave = wave.mean(axis=0 if wave.shape[0] <= wave.shape[1] else -1)
         duration_sec = len(wave) / sample_rate
 
+        if wave.size == 0:
+            raise ValueError("空音频波形, 无法分析")
+        if not np.isfinite(wave).all():
+            raise ValueError("音频波形含 NaN/Inf, 无法分析")
+        if len(wave) < 100:
+            raise ValueError("音频波形过短, 无法分析")
+
         if sample_rate != self.sample_rate:
             wave = librosa.resample(wave, orig_sr=sample_rate, target_sr=self.sample_rate)
 

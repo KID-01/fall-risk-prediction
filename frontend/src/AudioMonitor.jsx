@@ -44,7 +44,7 @@ export default function AudioMonitor({
       ? 'recording'
       : error || micError
         ? 'error'
-        : monitorMode === 'video' && isRunning
+        : monitorMode === 'video' && isRunning && pipelineAudio?.enabled
           ? 'ready'
           : audioStatus?.model_loaded
             ? 'ready'
