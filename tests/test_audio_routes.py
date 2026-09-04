@@ -267,3 +267,64 @@ class TestAudioAnalyzeErrors:
         )
 
         assert response.status_code == 400
+
+
+# ============================================================
+# POST /api/v1/audio/analyze — 声音告警评估触发
+# ============================================================
+class TestAudioAnalyzeAlert:
+    def test_impact_event_generates_alert(self, monkeypatch):
+        """撞击声分数达标 → 端点调用音频告警评估并把 alert 附到响应"""
+        analyzer = AudioAnalyzer(config=_make_cfg())
+        analyzer._model = FakeModel()
+        analyzer._model.scores[0, 460] = 0.9
+        captured: dict = {}
+
+        def fake_eval(events, person_id, device_id):
+            captured["events"] = events
+            captured["person_id"] = person_id
+            captured["device_id"] = device_id
+            return {
+                "level": "critical",
+                "risk_score": 100.0,
+                "message": "撞击声触发高危: Thump, thud (0.90)",
+                "alert_id": 1,
+                "notification_id": "n1",
+                "reason_codes": ["audio_upload_detection"],
+            }
+
+        monkeypatch.setattr(routes, "evaluate_audio_alerts", fake_eval)
+        client = _make_client(monkeypatch, analyzer)
+
+        response = client.post(
+            "/api/v1/audio/analyze", **_upload("tone.wav", _wav_bytes(), "audio/wav")
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["alert"]["level"] == "critical"
+        assert payload["alert"]["alert_id"] == 1
+        assert captured["person_id"] == "default"
+        assert captured["device_id"] == "default"
+        assert len(captured["events"]) == 1
+
+    def test_silent_upload_skips_evaluation(self, monkeypatch):
+        """无事件 → 不调用音频告警评估, 响应不含 alert"""
+        analyzer = AudioAnalyzer(config=_make_cfg())
+        analyzer._model = FakeModel()
+        called: list = []
+
+        def fake_eval(events, person_id, device_id):
+            called.append(events)
+            return None
+
+        monkeypatch.setattr(routes, "evaluate_audio_alerts", fake_eval)
+        client = _make_client(monkeypatch, analyzer)
+
+        response = client.post(
+            "/api/v1/audio/analyze", **_upload("tone.wav", _wav_bytes(), "audio/wav")
+        )
+
+        assert response.status_code == 200
+        assert "alert" not in response.json()
+        assert called == []

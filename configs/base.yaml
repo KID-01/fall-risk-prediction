@@ -216,7 +216,7 @@ alert:
     format: "mp4"
   # 音频触发预警阈值
   audio:
-    impact_critical_threshold: 0.70      # 撞击声触发高危阈值
+    impact_critical_threshold: 0.40      # 撞击声触发高危阈值
     vocal_attention_threshold: 0.50      # 人声呼救至少关注级阈值
 
 # ── 声音事件识别 (PANNs Cnn14) ──
